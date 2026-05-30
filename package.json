@@ -1,0 +1,17 @@
+{
+  "name": "survival-challenge",
+  "version": "1.0.0",
+  "description": "主角生存挑战 - Phaser 3 俯视角生存自动战斗游戏",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "phaser": "^3.80.1"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0"
+  }
+}
