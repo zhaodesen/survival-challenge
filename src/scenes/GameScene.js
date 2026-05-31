@@ -5,6 +5,7 @@ import SpawnManager from '../systems/SpawnManager.js';
 import WaveManager from '../systems/WaveManager.js';
 import FireSystem from '../systems/FireSystem.js';
 import DropSystem from '../systems/DropSystem.js';
+import SkillSystem from '../systems/SkillSystem.js';
 import { DEVICE_CLASSES } from '../devices/index.js';
 import { WORLD, DEVICES, SCORE, PICKUPS } from '../config/balance.js';
 
@@ -51,14 +52,19 @@ export default class GameScene extends Phaser.Scene {
     this.spawnManager = new SpawnManager(this, this.difficulty);
     this.waveManager = new WaveManager(this, this.difficulty);
 
-    // 机关(常驻,踩上去激活、离开停用,不销毁)
+    // 机关(随机位置;前几关每关引入一种,用于教学)
     this.devices = [];
     this.activeDevice = null;
-    this.createDevices();
+    this.events.on('wave-start', this.onWaveStartDevices, this);
 
     // 火焰圈地系统 + 掉落道具系统(需在 player 之后创建)
     this.fireSystem = new FireSystem(this);
     this.dropSystem = new DropSystem(this);
+
+    // 技能系统(后期:全机关满级后启用)
+    this.skills = new SkillSystem(this);
+    this.skillMode = false;
+    this.skillSelectOffered = false;
 
     // 抛射物(弓箭)
     this.arrows = [];
@@ -76,11 +82,55 @@ export default class GameScene extends Phaser.Scene {
   }
 
   // ---------- 机关管理 ----------
-  createDevices() {
-    DEVICES.layout.forEach((d) => {
-      const Cls = DEVICE_CLASSES[d.type];
-      if (Cls) this.devices.push(new Cls(this, d.x, d.y));
-    });
+  /** 每关开头:前 introOrder.length 关各引入一种新机关(教学) */
+  onWaveStartDevices(wave) {
+    const order = DEVICES.introOrder;
+    if (wave >= 1 && wave <= order.length) {
+      this.introduceDevice(order[wave - 1]);
+    }
+  }
+
+  introduceDevice(type) {
+    const Cls = DEVICE_CLASSES[type];
+    if (!Cls) return;
+    const pos = this.randomDevicePosition();
+    const dev = new Cls(this, pos.x, pos.y);
+    this.devices.push(dev);
+    // 出现反馈 + 教学提示
+    const ring = this.add.circle(pos.x, pos.y, DEVICES.baseRadius, dev.cfg.color, 0.4).setDepth(6);
+    this.tweens.add({ targets: ring, scale: 2.4, alpha: 0, duration: 700, onComplete: () => ring.destroy() });
+    const info = DEVICES.info[type];
+    this.events.emit('device-introduced', type, info.name, info.desc, pos.x, pos.y);
+  }
+
+  /** 随机生成一个不与现有机关/玩家太近、且远离边缘的机关位置 */
+  randomDevicePosition() {
+    const m = DEVICES.spawnMargin;
+    const px = this.player ? this.player.x : WORLD.width / 2;
+    const py = this.player ? this.player.y : WORLD.height / 2;
+    let best = { x: WORLD.width / 2, y: WORLD.height / 2 };
+    for (let tries = 0; tries < 40; tries++) {
+      const x = Phaser.Math.Between(m, WORLD.width - m);
+      const y = Phaser.Math.Between(m, WORLD.height - m);
+      if (Phaser.Math.Distance.Between(x, y, px, py) < DEVICES.minPlayerDist) continue;
+      let okDist = true;
+      for (const d of this.devices) {
+        if (Phaser.Math.Distance.Between(x, y, d.x, d.y) < DEVICES.minDistBetween) { okDist = false; break; }
+      }
+      if (okDist) return { x, y };
+      best = { x, y };
+    }
+    return best;
+  }
+
+  /** 打开机关升级弹框(暂停游戏) */
+  openUpgrade(device) {
+    if (this.gameOver) return;
+    if (this.scene.isActive('Upgrade')) return;
+    // 取消摇杆,避免暂停后残留
+    this.joy.active = false; this.joy.dx = 0; this.joy.dy = 0; this.joy.pointerId = -1;
+    this.hideJoystick();
+    this.scene.launch('Upgrade', { device });
   }
 
 
@@ -104,7 +154,9 @@ export default class GameScene extends Phaser.Scene {
     this.joy = { active: false, baseX: 0, baseY: 0, dx: 0, dy: 0, pointerId: -1 };
     const maxR = 90;
 
-    this.input.on('pointerdown', (p) => {
+    this.input.on('pointerdown', (p, currentlyOver) => {
+      // 点击到机关(可交互对象)时不触发摇杆,交给升级逻辑
+      if (currentlyOver && currentlyOver.length > 0) return;
       if (!this.joy.active) {
         this.joy.active = true;
         this.joy.pointerId = p.id;
@@ -172,12 +224,46 @@ export default class GameScene extends Phaser.Scene {
     this.dropSystem.update(time, delta);
     this.expireBuffs(time);
 
-    // 机关激活判定:取玩家所在范围内最近的一个机关
-    this.updateDeviceActivation(time);
-    this.devices.forEach((d) => d.update(time, delta));
+    if (this.skillMode) {
+      this.skills.update(time, delta);
+    } else {
+      // 机关激活判定 + 全机关满级检测
+      this.updateDeviceActivation(time);
+      this.devices.forEach((d) => d.update(time, delta));
+      this.checkAllDevicesMaxed();
+    }
 
     this.updateArrows(time, delta);
     this.drawEnemyHealthBars();
+  }
+
+  /** 全部机关满级 → 弹出技能选择(一次) */
+  checkAllDevicesMaxed() {
+    if (this.skillSelectOffered) return;
+    if (this.devices.length < DEVICES.introOrder.length) return;
+    if (!this.devices.every((d) => d.isMaxLevel)) return;
+    if (this.scene.isActive('Upgrade')) return;   // 等升级弹框关闭后再弹
+    this.skillSelectOffered = true;
+    this.scene.launch('SkillSelect');
+  }
+
+  /** 进入技能阶段:角色获得 3 项技能,机关消失,之后每关 Boss */
+  enterSkillMode(types) {
+    this.skillMode = true;
+    types.forEach((t) => this.skills.addSkill(t));
+    this.devices.forEach((d) => d.destroy());
+    this.devices = [];
+    this.activeDevice = null;
+    this.events.emit('skill-mode-on', types);
+  }
+
+  /** 打开技能升级弹框(右侧图标点击) */
+  openSkillUpgrade() {
+    if (this.gameOver || !this.skillMode) return;
+    if (this.scene.isActive('SkillUpgrade')) return;
+    this.joy.active = false; this.joy.dx = 0; this.joy.dy = 0; this.joy.pointerId = -1;
+    this.hideJoystick();
+    this.scene.launch('SkillUpgrade');
   }
 
   /** 在每个受伤敌人头顶绘制血条 */
@@ -265,12 +351,15 @@ export default class GameScene extends Phaser.Scene {
     const px = this.player.x; const py = this.player.y;
     let nearest = null; let bestD = Infinity;
     const r = DEVICES.baseRadius + 4;
+    // 只在"非满级"机关里找玩家正在踩的那个
     for (const d of this.devices) {
+      if (d.isMaxLevel) continue;
       const dist = Phaser.Math.Distance.Squared(px, py, d.x, d.y);
       if (dist <= r * r && dist < bestD) { bestD = dist; nearest = d; }
     }
     for (const d of this.devices) {
-      d.setActivated(d === nearest, time);
+      // 满级机关:自动攻击,常驻激活;其余:玩家踩中才激活
+      d.setActivated(d.isMaxLevel || d === nearest, time);
     }
     this.activeDevice = nearest;
   }

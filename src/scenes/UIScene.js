@@ -49,6 +49,22 @@ export default class UIScene extends Phaser.Scene {
       fontSize: '46px', fontStyle: 'bold', color: '#ffffff', align: 'center'
     }).setOrigin(0.5).setAlpha(0);
 
+    // 右侧技能图标(技能阶段才显示,点击打开技能升级)
+    this.skillIcon = this.add.container(W - 56, this.scale.height / 2).setDepth(50).setVisible(false);
+    const iconBg = this.add.circle(0, 0, 38, 0x141a26, 0.95).setStrokeStyle(3, 0xffd24a).setInteractive({ useHandCursor: true });
+    const iconStar = this.add.image(0, -4, 'pk_atkUp').setScale(1.1);
+    const iconTxt = this.add.text(0, 22, '技能', { fontSize: '13px', color: '#ffd24a' }).setOrigin(0.5);
+    this.skillIcon.add([iconBg, iconStar, iconTxt]);
+    iconBg.on('pointerdown', () => { if (this.game_.openSkillUpgrade) this.game_.openSkillUpgrade(); });
+    this.tweens.add({ targets: this.skillIcon, scale: 1.08, duration: 700, yoyo: true, repeat: -1 });
+
+    // 机关教学提示面板(底部居中,数秒后淡出)
+    this.tutorialBox = this.add.container(W / 2, this.scale.height - 70).setAlpha(0);
+    this.tutorialBg = this.add.rectangle(0, 0, 760, 78, 0x141a26, 0.95).setStrokeStyle(2, 0x4fd1ff);
+    this.tutorialTitle = this.add.text(0, -20, '', { fontSize: '20px', fontStyle: 'bold', color: '#4fd1ff' }).setOrigin(0.5);
+    this.tutorialDesc = this.add.text(0, 8, '', { fontSize: '15px', color: '#cdd8e6', align: 'center', wordWrap: { width: 720 } }).setOrigin(0.5);
+    this.tutorialBox.add([this.tutorialBg, this.tutorialTitle, this.tutorialDesc]);
+
     // Boss 倒计时(屏幕中上)
     this.bossWarn = this.add.text(W / 2, 90, '', {
       fontSize: '40px', fontStyle: 'bold', color: '#ff3d7f'
@@ -205,6 +221,25 @@ export default class UIScene extends Phaser.Scene {
       const hex = `#${(color >>> 0).toString(16).padStart(6, '0')}`;
       this.showBanner(`获得:${name}`, hex, 700);
     });
+
+    // 新机关教学
+    ev.on('device-introduced', (type, name, desc) => {
+      this.tutorialTitle.setText(`🆕 新机关:${name}`);
+      this.tutorialDesc.setText(desc);
+      this.tweens.killTweensOf(this.tutorialBox);
+      this.tutorialBox.setAlpha(1);
+      this.tweens.add({ targets: this.tutorialBox, alpha: 0, delay: 6000, duration: 800 });
+    });
+
+    // 进入技能阶段
+    ev.on('skill-mode-on', () => {
+      this.skillIcon.setVisible(true);
+      this.tutorialTitle.setText('⚡ 技能已觉醒!');
+      this.tutorialDesc.setText('机关已消失,技能自动释放。点击右侧图标花金币升级技能。之后每关都是 Boss!');
+      this.tweens.killTweensOf(this.tutorialBox);
+      this.tutorialBox.setAlpha(1);
+      this.tweens.add({ targets: this.tutorialBox, alpha: 0, delay: 7000, duration: 800 });
+    });
   }
 
   showBanner(text, color, hold = 1100) {
@@ -259,11 +294,13 @@ export default class UIScene extends Phaser.Scene {
       this.vignette.setAlpha(0);
     }
 
-    // 当前机关
-    if (g.activeDevice) {
+    // 当前机关 / 技能状态
+    if (g.skillMode) {
+      this.deviceText.setText('⚡ 技能自动释放中');
+    } else if (g.activeDevice) {
       this.deviceText.setText(`▶ 操控中:${g.activeDevice.displayName()}`);
     } else {
-      this.deviceText.setText('（站到机关上以操控）');
+      this.deviceText.setText('（站到机关上以操控;点击机关升级)');
     }
 
     // 减速状态

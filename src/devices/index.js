@@ -6,20 +6,20 @@ export class Cannon extends Device {
   constructor(scene, x, y) { super(scene, x, y, 'cannon'); }
 
   onTick(time) {
-    if (time - this.lastTick < this.cfg.interval) return;
-    const target = this.nearestHostile(this.cfg.range);
+    if (time - this.lastTick < this.stats.interval) return;
+    const target = this.nearestHostile(this.stats.range);
     if (!target) return;
     this.lastTick = time;
 
     const tx = target.x; const ty = target.y;
     // 落点预警 + 爆炸
-    this.scene.fxTelegraph(tx, ty, this.cfg.radius, this.cfg.color, 350, () => {
-      this.scene.fxExplosion(tx, ty, this.cfg.radius, this.cfg.color);
+    this.scene.fxTelegraph(tx, ty, this.stats.radius, this.stats.color, 350, () => {
+      this.scene.fxExplosion(tx, ty, this.stats.radius, this.stats.color);
       const hostiles = this.scene.getHostiles();
-      const r2 = this.cfg.radius * this.cfg.radius;
+      const r2 = this.stats.radius * this.stats.radius;
       for (const h of hostiles) {
         if (Phaser.Math.Distance.Squared(tx, ty, h.x, h.y) <= r2) {
-          this.scene.damageHostile(h, this.cfg.damage);
+          this.scene.damageHostile(h, this.stats.damage);
         }
       }
     });
@@ -38,26 +38,26 @@ export class Laser extends Device {
   onDeactivate() { this.beam.clear(); }
 
   onTick(time, delta) {
-    if (time - this.lastRetarget > this.cfg.retargetMs) {
+    if (time - this.lastRetarget > this.stats.retargetMs) {
       this.lastRetarget = time;
-      const t = this.nearestHostile(this.cfg.length);
+      const t = this.nearestHostile(this.stats.length);
       if (t) this.aimAngle = Math.atan2(t.y - this.y, t.x - this.x);
     }
 
-    const ex = this.x + Math.cos(this.aimAngle) * this.cfg.length;
-    const ey = this.y + Math.sin(this.aimAngle) * this.cfg.length;
+    const ex = this.x + Math.cos(this.aimAngle) * this.stats.length;
+    const ey = this.y + Math.sin(this.aimAngle) * this.stats.length;
 
     // 绘制激光
     this.beam.clear();
-    this.beam.lineStyle(this.cfg.width, this.cfg.color, 0.85);
+    this.beam.lineStyle(this.stats.width, this.stats.color, 0.85);
     this.beam.lineBetween(this.x, this.y, ex, ey);
-    this.beam.lineStyle(this.cfg.width * 0.4, 0xffffff, 0.9);
+    this.beam.lineStyle(this.stats.width * 0.4, 0xffffff, 0.9);
     this.beam.lineBetween(this.x, this.y, ex, ey);
 
     // 对线段范围内所有目标造成 dps
-    const dmg = this.cfg.dps * delta / 1000;
+    const dmg = this.stats.dps * delta / 1000;
     const hostiles = this.scene.getHostiles();
-    const half = this.cfg.width / 2 + 6;
+    const half = this.stats.width / 2 + 6;
     for (const h of hostiles) {
       const d = distToSegment(h.x, h.y, this.x, this.y, ex, ey);
       if (d <= half + (h.radius || 12)) {
@@ -72,11 +72,11 @@ export class Bow extends Device {
   constructor(scene, x, y) { super(scene, x, y, 'bow'); }
 
   onTick(time) {
-    if (time - this.lastTick < this.cfg.interval) return;
-    const target = this.nearestHostile(this.cfg.range);
+    if (time - this.lastTick < this.stats.interval) return;
+    const target = this.nearestHostile(this.stats.range);
     if (!target) return;
     this.lastTick = time;
-    this.scene.fireArrow(this.x, this.y, target, this.cfg.damage, this.cfg.projSpeed);
+    this.scene.fireArrow(this.x, this.y, target, this.stats.damage, this.stats.projSpeed);
   }
 }
 
@@ -85,16 +85,16 @@ export class Thunder extends Device {
   constructor(scene, x, y) { super(scene, x, y, 'thunder'); }
 
   onTick(time) {
-    if (time - this.lastTick < this.cfg.interval) return;
-    const main = this.nearestHostile(this.cfg.range);
+    if (time - this.lastTick < this.stats.interval) return;
+    const main = this.nearestHostile(this.stats.range);
     if (!main) return;
     this.lastTick = time;
 
     // 主目标
-    this.scene.fxLightning(this.x, this.y, main.x, main.y, this.cfg.color);
+    this.scene.fxLightning(this.x, this.y, main.x, main.y, this.stats.color);
     // 收集溅射目标(按到主目标距离排序)
     const hostiles = this.scene.getHostiles();
-    const r2 = this.cfg.splashRadius * this.cfg.splashRadius;
+    const r2 = this.stats.splashRadius * this.stats.splashRadius;
     const splash = [];
     for (const h of hostiles) {
       if (h === main) continue;
@@ -103,11 +103,11 @@ export class Thunder extends Device {
     }
     splash.sort((a, b) => a.d2 - b.d2);
 
-    this.scene.damageHostile(main, this.cfg.mainDamage);
+    this.scene.damageHostile(main, this.stats.mainDamage);
     splash.forEach((s, i) => {
-      const factor = Math.max(this.cfg.minFactor, 1 - this.cfg.decayPerLayer * (i + 1));
-      this.scene.fxLightning(main.x, main.y, s.h.x, s.h.y, this.cfg.color, 0.5);
-      this.scene.damageHostile(s.h, this.cfg.mainDamage * factor);
+      const factor = Math.max(this.stats.minFactor, 1 - this.stats.decayPerLayer * (i + 1));
+      this.scene.fxLightning(main.x, main.y, s.h.x, s.h.y, this.stats.color, 0.5);
+      this.scene.damageHostile(s.h, this.stats.mainDamage * factor);
     });
   }
 }
@@ -124,12 +124,12 @@ export class SlowStation extends Device {
 
   tryTrigger(time) {
     if (time < this.readyAt) return;
-    this.readyAt = time + this.cfg.cooldown;
-    const until = time + this.cfg.duration;
-    this.scene.spawnManager.applySlowAll(this.cfg.slowFactor, until);
+    this.readyAt = time + this.stats.cooldown;
+    const until = time + this.stats.duration;
+    this.scene.spawnManager.applySlowAll(this.stats.slowFactor, until);
     this.scene.activeSlowUntil = until;        // 让后续生成的敌人也减速(GameScene 处理)
     this.scene.cameras.main.flash(200, 120, 160, 255);
-    this.scene.events.emit('slow-triggered', this.cfg.duration);
+    this.scene.events.emit('slow-triggered', this.stats.duration);
   }
 }
 

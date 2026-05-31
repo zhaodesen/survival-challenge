@@ -4,6 +4,9 @@ import GameScene from './scenes/GameScene.js';
 import UIScene from './scenes/UIScene.js';
 import GameOverScene from './scenes/GameOverScene.js';
 import StartScene from './scenes/StartScene.js';
+import UpgradeScene from './scenes/UpgradeScene.js';
+import SkillSelectScene from './scenes/SkillSelectScene.js';
+import SkillUpgradeScene from './scenes/SkillUpgradeScene.js';
 
 const config = {
   type: Phaser.AUTO,
@@ -33,7 +36,7 @@ const config = {
     pixelArt: false,
     antialias: true
   },
-  scene: [BootScene, StartScene, GameScene, UIScene, GameOverScene]
+  scene: [BootScene, StartScene, GameScene, UIScene, GameOverScene, UpgradeScene, SkillSelectScene, SkillUpgradeScene]
 };
 
 // eslint-disable-next-line no-new

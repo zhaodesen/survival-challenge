@@ -110,17 +110,20 @@ export const BOSS = {
 export const DEVICES = {
   // 共用外观
   baseRadius: 34,
-  layout: [
-    { type: 'thunder', x: 1400, y: 1400 },  // 中心:雷电站
-    { type: 'cannon',  x: 800,  y: 800 },
-    { type: 'laser',   x: 2000, y: 800 },
-    { type: 'bow',     x: 800,  y: 2000 },
-    { type: 'thunder', x: 2000, y: 2000 },
-    { type: 'slow',    x: 1400, y: 700 },
-    { type: 'cannon',  x: 1400, y: 2100 },
-    { type: 'bow',     x: 700,  y: 1400 },
-    { type: 'laser',   x: 2100, y: 1400 }
-  ],
+  // 教学:前几关每关引入一种机关(顺序由简到繁)
+  introOrder: ['bow', 'cannon', 'laser', 'thunder', 'slow'],
+  // 机关位置随机生成的约束
+  spawnMargin: 320,       // 距地图边缘
+  minDistBetween: 380,    // 机关之间最小间距
+  minPlayerDist: 280,     // 距玩家出生点最小距离
+  // 各机关的名称与教学说明
+  info: {
+    bow:     { name: '弓箭', desc: '持续锁定最近的单个敌人射箭。走到机关上踩住即可操控;点击机关可花金币升级。' },
+    cannon:  { name: '火炮台', desc: '周期性向敌群轰炸一片区域,造成范围伤害。适合清理成群的敌人。' },
+    laser:   { name: '激光炮', desc: '朝最近敌人方向发射穿透直线激光,持续灼烧路径上的所有敌人。' },
+    thunder: { name: '雷电站', desc: '电击单体并向周围溅射,每层衰减 10%(最低 40%)。越密集越赚。' },
+    slow:    { name: '全体减速站', desc: '触发后全场敌人移速减半,持续一段时间,带冷却。危急时争取喘息。' }
+  },
   cannon: {
     color: 0xff8c42,
     interval: 1100,   // 开炮间隔
@@ -157,6 +160,45 @@ export const DEVICES = {
     duration: 15000,  // 持续 15 秒
     cooldown: 22000   // 冷却 22 秒
   }
+};
+
+/**
+ * 机关升级:点击机关花金币升级,满级 10 级。
+ * 升级提升攻击力 / 攻击频率(间隔变短)/ 攻击范围。
+ */
+export const UPGRADE = {
+  cost: 50,              // 每次升级花费金币
+  maxLevel: 10,
+  damagePerLevel: 1.18,  // 攻击力每级 ×1.18
+  intervalPerLevel: 0.93,// 攻击间隔每级 ×0.93(频率更快)
+  rangePerLevel: 1.06,   // 攻击范围每级 ×1.06
+  // 受缩放影响的字段分桶
+  damageKeys: ['damage', 'dps', 'mainDamage'],
+  intervalKeys: ['interval', 'cooldown', 'retargetMs'],
+  rangeKeys: ['range', 'radius', 'splashRadius', 'length', 'duration']
+};
+
+/**
+ * 技能系统(后期):全机关满级后,角色选择 3 项能力变为自身技能,自动释放。
+ * 每 10 金币升级一次,巨幅提升能力。机关随之消失,之后每关都是 Boss 关。
+ */
+export const SKILL = {
+  cost: 10,              // 每次升级花费金币
+  maxLevel: 30,
+  baseMul: 1.6,          // 技能基础伤害相对机关 ×1.6
+  damagePerLevel: 1.35,  // 攻击力每级 ×1.35(巨幅)
+  intervalPerLevel: 0.90,// 攻击间隔每级 ×0.90(更快)
+  rangePerLevel: 1.10,   // 范围每级 ×1.10
+  damageKeys: ['damage', 'dps', 'mainDamage'],
+  intervalKeys: ['interval', 'cooldown', 'retargetMs'],
+  rangeKeys: ['range', 'radius', 'splashRadius', 'length', 'duration'],
+  // 进入技能阶段后,每关 Boss 关的小怪数量
+  bossMinionsPerWave: 12,
+  // Boss 史诗级增强(在原逐关缩放基础上叠加)
+  epicHpMul: 6,
+  epicAtkMul: 2.4,
+  epicHpGrowthPerWave: 1.45,  // 进入技能阶段后,每关 Boss 血量额外 ×1.45
+  epicAtkGrowthPerWave: 1.16
 };
 
 /**

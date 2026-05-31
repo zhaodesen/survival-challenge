@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import Boss from '../entities/Boss.js';
-import { WAVE, BOSS } from '../config/balance.js';
+import { WAVE, BOSS, SKILL } from '../config/balance.js';
 
 /**
  * WaveManager —— 关卡(波次)调度。
@@ -85,12 +85,13 @@ export default class WaveManager {
   beginWave() {
     this.wave = this.nextWave;
     this.difficulty.setWave(this.wave);
-    this.isBossWave = (this.wave % WAVE.bossEvery === 0);
+    // 技能阶段:每关都是 Boss 关
+    this.isBossWave = this.scene.skillMode || (this.wave % WAVE.bossEvery === 0);
     this.spawnedThisWave = 0;
     this.accum = 0;
 
     if (this.isBossWave) {
-      this.totalThisWave = WAVE.bossMinions;
+      this.totalThisWave = this.scene.skillMode ? SKILL.bossMinionsPerWave : WAVE.bossMinions;
       this.phase = 'bosswarn';
       this.timer = WAVE.bossWarning;
       this.scene.events.emit('wave-start', this.wave, true);
@@ -119,11 +120,24 @@ export default class WaveManager {
   spawnBoss() {
     this.bossSpawnCount += 1;
     const idx = this.bossSpawnCount;
+    let hp = BOSS.base.hp * Math.pow(BOSS.hpMulPerSpawn, idx - 1);
+    let atk = BOSS.base.atk * Math.pow(BOSS.atkMulPerSpawn, idx - 1);
+    let def = BOSS.base.def + BOSS.defAddPerSpawn * (idx - 1);
+
+    // 技能阶段:Boss 史诗级增强(基础倍率 + 每关额外增长)
+    if (this.scene.skillMode) {
+      this.skillBossCount = (this.skillBossCount || 0) + 1;
+      const k = this.skillBossCount - 1;
+      hp *= SKILL.epicHpMul * Math.pow(SKILL.epicHpGrowthPerWave, k);
+      atk *= SKILL.epicAtkMul * Math.pow(SKILL.epicAtkGrowthPerWave, k);
+      def += 20 * this.skillBossCount;
+    }
+
     const stats = {
-      hp: Math.round(BOSS.base.hp * Math.pow(BOSS.hpMulPerSpawn, idx - 1)),
+      hp: Math.round(hp),
       speed: BOSS.base.speed,
-      atk: Math.round(BOSS.base.atk * Math.pow(BOSS.atkMulPerSpawn, idx - 1)),
-      def: BOSS.base.def + BOSS.defAddPerSpawn * (idx - 1),
+      atk: Math.round(atk),
+      def: Math.round(def),
       contactCd: BOSS.base.contactCd
     };
 
