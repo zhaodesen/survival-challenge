@@ -3,7 +3,7 @@ import Enemy from '../entities/Enemy.js';
 import { ENEMY } from '../config/balance.js';
 
 /**
- * SpawnManager —— 管理敌人对象池与刷新逻辑。
+ * SpawnManager —— 敌人对象池工厂。具体何时刷、刷多少由 WaveManager 调度。
  */
 export default class SpawnManager {
   constructor(scene, difficulty) {
@@ -15,8 +15,6 @@ export default class SpawnManager {
       runChildUpdate: true,
       maxSize: -1
     });
-
-    this.accum = 0;
   }
 
   get activeCount() {
@@ -33,8 +31,8 @@ export default class SpawnManager {
     return e;
   }
 
-  /** 在玩家屏幕外随机方向生成一个敌人 */
-  spawnOne() {
+  /** 在玩家屏幕外随机方向生成一个敌人,返回该敌人 */
+  spawnOffscreen() {
     const cam = this.scene.cameras.main;
     const player = this.scene.player;
     const halfW = cam.width / 2 / cam.zoom;
@@ -56,31 +54,25 @@ export default class SpawnManager {
     return e;
   }
 
-  /** Boss 在自身周围召唤小怪 */
-  summonAround(cx, cy, count) {
-    for (let i = 0; i < count; i++) {
-      if (this.activeCount >= this.difficulty.maxAlive) break;
-      const ang = (Math.PI * 2 * i) / count + Math.random() * 0.5;
-      const dist = 80 + Math.random() * 60;
-      const x = cx + Math.cos(ang) * dist;
-      const y = cy + Math.sin(ang) * dist;
-      const typeKey = this.difficulty.pickEnemyType();
-      const stats = this.difficulty.getEnemyStats(typeKey);
-      const e = this.obtain(x, y);
-      e.spawn(x, y, typeKey, stats);
-    }
+  /** 在指定点附近生成一个敌人(Boss 召唤用) */
+  spawnAt(cx, cy) {
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 70 + Math.random() * 70;
+    const x = cx + Math.cos(ang) * dist;
+    const y = cy + Math.sin(ang) * dist;
+    const typeKey = this.difficulty.pickEnemyType();
+    const stats = this.difficulty.getEnemyStats(typeKey);
+    const e = this.obtain(x, y);
+    e.spawn(x, y, typeKey, stats);
+    return e;
   }
 
-  update(time, delta) {
-    this.accum += delta;
-    const interval = this.difficulty.spawnInterval;
-    if (this.accum >= interval) {
-      this.accum = 0;
-      const batch = this.difficulty.spawnBatch;
-      for (let i = 0; i < batch; i++) {
-        if (this.activeCount >= this.difficulty.maxAlive) break;
-        this.spawnOne();
-      }
+  /** Boss 在自身周围召唤小怪(受场上上限约束) */
+  summonAround(cx, cy, count) {
+    const cap = this.scene.waveManager ? this.scene.waveManager.concurrentCap : 80;
+    for (let i = 0; i < count; i++) {
+      if (this.activeCount >= cap) break;
+      this.spawnAt(cx, cy);
     }
   }
 

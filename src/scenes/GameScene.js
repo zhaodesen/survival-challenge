@@ -2,9 +2,11 @@ import Phaser from 'phaser';
 import Player from '../entities/Player.js';
 import DifficultyManager from '../systems/DifficultyManager.js';
 import SpawnManager from '../systems/SpawnManager.js';
-import BossManager from '../systems/BossManager.js';
+import WaveManager from '../systems/WaveManager.js';
+import FireSystem from '../systems/FireSystem.js';
+import DropSystem from '../systems/DropSystem.js';
 import { DEVICE_CLASSES } from '../devices/index.js';
-import { WORLD, DEVICES, SCORE } from '../config/balance.js';
+import { WORLD, DEVICES, SCORE, PICKUPS } from '../config/balance.js';
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
@@ -20,8 +22,19 @@ export default class GameScene extends Phaser.Scene {
     this.kills = 0;
     this.bossKills = 0;
     this.score = 0;
-    this.activeSlowUntil = 0;
+    this.coins = 0;
     this.gameOver = false;
+
+    // 全局增益/减益(由道具碎片驱动)
+    this.activeSlowUntil = 0;     // 全体减速结束时间
+    this.damageMul = 1;           // 我方输出倍率(攻击提升)
+    this.damageMulUntil = 0;
+    this.enemyDefMul = 1;         // 敌人防御倍率(减防御)
+    this.enemyDefUntil = 0;
+    this.enemyAtkMul = 1;         // 敌人攻击倍率(降攻击)
+    this.enemyAtkUntil = 0;
+    this.invincibleUntil = 0;     // 无敌结束时间
+    this.timeStopUntil = 0;       // 时间停止结束时间
 
     // 玩家
     this.player = new Player(this, WORLD.width / 2, WORLD.height / 2);
@@ -33,30 +46,43 @@ export default class GameScene extends Phaser.Scene {
     this.cameras.main.setZoom(1);
 
     // 系统
+    this.boss = null;
     this.difficulty = new DifficultyManager();
     this.spawnManager = new SpawnManager(this, this.difficulty);
-    this.bossManager = new BossManager(this, this.difficulty);
+    this.waveManager = new WaveManager(this, this.difficulty);
 
-    // 机关
+    // 机关(常驻,踩上去激活、离开停用,不销毁)
     this.devices = [];
-    DEVICES.layout.forEach((d) => {
-      const Cls = DEVICE_CLASSES[d.type];
-      if (Cls) this.devices.push(new Cls(this, d.x, d.y));
-    });
+    this.activeDevice = null;
+    this.createDevices();
+
+    // 火焰圈地系统 + 掉落道具系统(需在 player 之后创建)
+    this.fireSystem = new FireSystem(this);
+    this.dropSystem = new DropSystem(this);
 
     // 抛射物(弓箭)
     this.arrows = [];
     this.fx = this.add.graphics().setDepth(9);
+    this.enemyHpGfx = this.add.graphics().setDepth(11);  // 敌人血条层
 
     // 碰撞:玩家 vs 敌人 / Boss
     this.physics.add.overlap(this.player, this.spawnManager.group, this.onPlayerHit, null, this);
-    this.physics.add.overlap(this.player, this.bossManager.group, this.onPlayerHit, null, this);
+    this.physics.add.overlap(this.player, this.waveManager.group, this.onPlayerHit, null, this);
 
     this.setupInput();
 
     // 通知 UI 场景获取本场景引用
     this.events.emit('game-started');
   }
+
+  // ---------- 机关管理 ----------
+  createDevices() {
+    DEVICES.layout.forEach((d) => {
+      const Cls = DEVICE_CLASSES[d.type];
+      if (Cls) this.devices.push(new Cls(this, d.x, d.y));
+    });
+  }
+
 
   // ---------- 背景 ----------
   drawBackground() {
@@ -150,14 +176,98 @@ export default class GameScene extends Phaser.Scene {
 
     this.readInput();
     this.difficulty.update(delta);
-    this.spawnManager.update(time, delta);
-    this.bossManager.update(time, delta);
+    this.waveManager.update(time, delta);
+    this.fireSystem.update(time, delta);
+    this.dropSystem.update(time, delta);
+    this.expireBuffs(time);
 
     // 机关激活判定:取玩家所在范围内最近的一个机关
     this.updateDeviceActivation(time);
     this.devices.forEach((d) => d.update(time, delta));
 
     this.updateArrows(time, delta);
+    this.drawEnemyHealthBars();
+  }
+
+  /** 在每个受伤敌人头顶绘制血条 */
+  drawEnemyHealthBars() {
+    const g = this.enemyHpGfx;
+    g.clear();
+    const w = 28; const h = 4;
+    const enemies = this.spawnManager.group.getChildren();
+    for (const e of enemies) {
+      if (!e.active || e.hp >= e.maxHp) continue;
+      const ratio = Phaser.Math.Clamp(e.hp / e.maxHp, 0, 1);
+      const x = e.x - w / 2;
+      const y = e.y - (e.radius || 12) - 12;
+      g.fillStyle(0x000000, 0.6);
+      g.fillRect(x - 1, y - 1, w + 2, h + 2);
+      const col = ratio > 0.5 ? 0x49e07a : ratio > 0.25 ? 0xffd166 : 0xff5555;
+      g.fillStyle(col, 1);
+      g.fillRect(x, y, w * ratio, h);
+    }
+  }
+
+  /** Boss 技能对玩家造成伤害(尊重无敌/时停) */
+  tryDamagePlayer(amount) {
+    const now = this.time.now;
+    if (now < this.timeStopUntil) return;
+    if (now < this.invincibleUntil) return;
+    this.player.takeDamage(amount, now);
+  }
+
+  expireBuffs(time) {
+    if (time > this.damageMulUntil) this.damageMul = 1;
+    if (time > this.enemyDefUntil) this.enemyDefMul = 1;
+    if (time > this.enemyAtkUntil) this.enemyAtkMul = 1;
+  }
+
+  // ---------- 道具效果 ----------
+  addCoins(n) {
+    this.coins += n;
+  }
+
+  applyMassSlow(factor, dur) {
+    const until = this.time.now + dur;
+    this.activeSlowUntil = until;
+    this.spawnManager.applySlowAll(factor, until);
+    if (this.waveManager.hasBoss) this.waveManager.boss.applySlow(factor, until);
+  }
+
+  applyEnemyDefDown(factor, dur) {
+    this.enemyDefMul = factor;
+    this.enemyDefUntil = this.time.now + dur;
+  }
+
+  applyEnemyAtkDown(factor, dur) {
+    this.enemyAtkMul = factor;
+    this.enemyAtkUntil = this.time.now + dur;
+  }
+
+  applyAtkUp(mul, dur) {
+    this.damageMul = mul;
+    this.damageMulUntil = this.time.now + dur;
+  }
+
+  applyInvincible(dur) {
+    this.invincibleUntil = this.time.now + dur;
+    this.player.setTint(0xfff27a);
+    this.time.delayedCall(dur, () => { if (this.player.active) this.player.clearTint(); });
+  }
+
+  applyTimeStop(dur) {
+    this.timeStopUntil = this.time.now + dur;
+    this.cameras.main.flash(160, 150, 220, 255);
+  }
+
+  killRandomEnemies(count) {
+    const enemies = this.spawnManager.group.getChildren().filter((e) => e.active);
+    Phaser.Utils.Array.Shuffle(enemies);
+    const n = Math.min(count, enemies.length);
+    for (let i = 0; i < n; i++) {
+      this.fxExplosion(enemies[i].x, enemies[i].y, 36, 0xff4d4d);
+      this.damageHostile(enemies[i], 999999);
+    }
   }
 
   updateDeviceActivation(time) {
@@ -177,13 +287,13 @@ export default class GameScene extends Phaser.Scene {
   // ---------- 战斗 ----------
   getHostiles() {
     const list = this.spawnManager.group.getChildren().filter((e) => e.active);
-    if (this.bossManager.hasBoss) list.push(this.bossManager.boss);
+    if (this.waveManager.hasBoss) list.push(this.waveManager.boss);
     return list;
   }
 
   damageHostile(target, amount) {
     if (!target.active) return;
-    const dead = target.takeDamage(amount);
+    const dead = target.takeDamage(amount * this.damageMul);
     if (dead) {
       if (target.isBoss) this.onBossKilled(target);
       else this.onEnemyKilled(target);
@@ -193,8 +303,12 @@ export default class GameScene extends Phaser.Scene {
   onEnemyKilled(enemy) {
     this.kills += 1;
     this.score += SCORE.perKill;
+    this.coins += PICKUPS.coinPerKill;
     this.fxDeath(enemy.x, enemy.y, enemy.tintTopLeft);
+    const x = enemy.x; const y = enemy.y;
     enemy.deactivate();
+    // 掉落判定
+    this.dropSystem.rollDrop(x, y);
   }
 
   onBossKilled(boss) {
@@ -206,16 +320,19 @@ export default class GameScene extends Phaser.Scene {
         boss.x + Phaser.Math.Between(-30, 30),
         boss.y + Phaser.Math.Between(-30, 30), 70, 0xff3d7f));
     }
-    this.bossManager.clearBoss();
+    this.waveManager.clearBoss();
     this.events.emit('boss-defeated');
   }
 
   onPlayerHit(player, enemy) {
     if (!enemy.active || !player.alive) return;
     const now = this.time.now;
+    // 时间停止 / 无敌期间不受接触伤害
+    if (now < this.timeStopUntil) return;
+    if (now < this.invincibleUntil) return;
     if (now - enemy.lastContact < enemy.contactCd) return;
     enemy.lastContact = now;
-    player.takeDamage(enemy.atk, now);
+    player.takeDamage(enemy.atk * this.enemyAtkMul, now);
   }
 
   // ---------- 弓箭抛射物 ----------
@@ -299,8 +416,10 @@ export default class GameScene extends Phaser.Scene {
     this.time.delayedCall(700, () => {
       const stats = {
         time: Math.floor(this.difficulty.seconds),
+        wave: this.waveManager.wave,
         kills: this.kills,
         bossKills: this.bossKills,
+        coins: this.coins,
         score: this.score
       };
       this.scene.stop('UI');

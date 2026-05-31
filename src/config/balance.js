@@ -11,8 +11,8 @@ export const WORLD = {
 };
 
 export const PLAYER = {
-  maxHp: 200,
-  speed: 220,
+  maxHp: 100,
+  speed: 230,
   radius: 16,
   color: 0x4fd1ff,
   // 受击后的无敌帧(毫秒),避免同一帧被多次扣血
@@ -20,18 +20,29 @@ export const PLAYER = {
 };
 
 /**
- * 难度:每 30 秒提升一档(tier),幅度小而稳。
- * 当前系数 = 基准 * 倍率^tier(线性项用加法)。
+ * 难度:以"关数"为单位逐关递增(每关 = 一档)。
  */
 export const DIFFICULTY = {
-  stepSeconds: 30,
-  enemyHpMul: 1.07,      // 每档敌人血量 ×1.07
-  enemyAtkMul: 1.05,     // 每档攻击 ×1.05
-  enemyDefAdd: 1.2,      // 每档防御 +1.2
-  spawnRateMul: 1.08,    // 每档刷新速率 ×1.08
-  maxAliveBase: 40,      // 初始场上最大敌人数
-  maxAliveAddPerTier: 6, // 每档 +6 上限
-  maxAliveCap: 300       // 硬上限,保护性能
+  enemyHpMul: 1.10,      // 每关敌人血量 ×1.10
+  enemyAtkMul: 1.06,     // 每关攻击 ×1.06
+  enemyDefAdd: 1.0       // 每关防御 +1.0
+};
+
+/**
+ * 关卡(波次):每关固定敌人数量,清完进下一关。每 bossEvery 关一个 Boss 关。
+ */
+export const WAVE = {
+  firstWaveEnemies: 12,      // 第 1 关敌人总数
+  enemiesPerWaveAdd: 5,      // 每关 +5
+  bossEvery: 5,              // 每 5 关一个 Boss 关
+  bossMinions: 6,            // Boss 关附带的小怪数
+  concurrentBase: 16,        // 场上同时存在敌人上限(基础)
+  concurrentAddPerWave: 2,   // 每关 +2
+  concurrentCap: 110,        // 硬上限,保护性能
+  trickleInterval: 380,      // 关内每隔多久放一批
+  trickleBatch: 3,           // 每批数量
+  intermission: 2600,        // 关与关之间的准备时间(ms)
+  bossWarning: 5000          // Boss 关出场前倒计时(ms)
 };
 
 export const ENEMY = {
@@ -43,26 +54,25 @@ export const ENEMY = {
     runner: { // 快速冲锋,血薄
       hp: 18, speed: 95, atk: 6, def: 0, radius: 10, color: 0xffd166, contactCd: 500, xp: 1
     },
-    tank: {   // 肉盾,慢但高血高防
-      hp: 90, speed: 38, atk: 14, def: 4, radius: 18, color: 0xa06bff, contactCd: 800, xp: 3
+    tank: {   // 肉盾,血厚高防但移速很慢
+      hp: 140, speed: 30, atk: 14, def: 5, radius: 20, color: 0xa06bff, contactCd: 800, xp: 3
+    },
+    striker: { // 刺客,攻击力很高但血量很低
+      hp: 16, speed: 70, atk: 28, def: 0, radius: 12, color: 0xff2d55, contactCd: 700, xp: 2
     }
   },
-  // 各类型随时间解锁与权重(秒)
-  unlock: [
-    { time: 0,   weights: { grunt: 1.0, runner: 0.0, tank: 0.0 } },
-    { time: 45,  weights: { grunt: 0.7, runner: 0.3, tank: 0.0 } },
-    { time: 120, weights: { grunt: 0.55, runner: 0.3, tank: 0.15 } },
-    { time: 240, weights: { grunt: 0.45, runner: 0.35, tank: 0.2 } }
+  // 各类型按"关数"解锁与权重
+  unlockByWave: [
+    { wave: 1, weights: { grunt: 1.0, runner: 0.0, tank: 0.0, striker: 0.0 } },
+    { wave: 2, weights: { grunt: 0.7, runner: 0.3, tank: 0.0, striker: 0.0 } },
+    { wave: 3, weights: { grunt: 0.55, runner: 0.3, tank: 0.0, striker: 0.15 } },
+    { wave: 4, weights: { grunt: 0.45, runner: 0.28, tank: 0.15, striker: 0.12 } },
+    { wave: 7, weights: { grunt: 0.36, runner: 0.3, tank: 0.18, striker: 0.16 } }
   ],
-  spawnIntervalBase: 900,   // 初始每 900ms 刷一批
-  spawnIntervalMin: 180,    // 最快刷新间隔
-  spawnBatchBase: 2,        // 每批基础数量
   spawnRadius: 120          // 在屏幕外多远生成
 };
 
 export const BOSS = {
-  intervalSeconds: 60,  // 每 60 秒一个 Boss
-  warningSeconds: 5,    // 出场前 5 秒倒计时
   base: {
     hp: 1200, speed: 42, atk: 30, def: 8, radius: 38, color: 0xff3d7f, contactCd: 700
   },
@@ -76,7 +86,21 @@ export const BOSS = {
   chargeWindup: 800,
   // 技能:召唤小怪
   summonCd: 8000,
-  summonCount: 4
+  summonCount: 4,
+  // 技能:冲击波(以 Boss 为中心扩散的环,命中玩家造成伤害)
+  shockwaveCd: 7000,
+  shockwaveWindup: 700,
+  shockwaveRadius: 260,
+  shockwaveDamage: 22,
+  // 技能:地面砸击(在玩家当前位置预警后落下范围伤害)
+  slamCd: 5500,
+  slamWindup: 900,
+  slamRadius: 130,
+  slamDamage: 26,
+  // 狂暴:血量低于该比例时移速/攻击提升
+  enrageHpRatio: 0.35,
+  enrageSpeedMul: 1.5,
+  enrageAtkMul: 1.3
 };
 
 /**
@@ -87,7 +111,7 @@ export const DEVICES = {
   // 共用外观
   baseRadius: 34,
   layout: [
-    { type: 'heal',    x: 1400, y: 1400 },  // 中心:恢复站
+    { type: 'thunder', x: 1400, y: 1400 },  // 中心:雷电站
     { type: 'cannon',  x: 800,  y: 800 },
     { type: 'laser',   x: 2000, y: 800 },
     { type: 'bow',     x: 800,  y: 2000 },
@@ -97,10 +121,6 @@ export const DEVICES = {
     { type: 'bow',     x: 700,  y: 1400 },
     { type: 'laser',   x: 2100, y: 1400 }
   ],
-  heal: {
-    color: 0x49e07a,
-    hpPerSec: 14
-  },
   cannon: {
     color: 0xff8c42,
     interval: 1100,   // 开炮间隔
@@ -136,6 +156,69 @@ export const DEVICES = {
     slowFactor: 0.5,  // 减速 50%(移速 ×0.5)
     duration: 15000,  // 持续 15 秒
     cooldown: 22000   // 冷却 22 秒
+  }
+};
+
+/**
+ * 火焰圈地系统(一次性):吃到火焰碎片后进入火焰模式,移动留下火焰轨迹,
+ * 轨迹自交闭合即把围住区域染红、烧死区域内所有敌人;烧一次后火焰模式结束。
+ */
+export const FIRE = {
+  fragmentRadius: 13,
+  fragmentColor: 0xff7a18,
+  trailSpacing: 12,         // 轨迹采点间距(px)
+  trailWidth: 7,
+  trailColor: 0xff7a18,
+  trailGlow: 0xffd166,
+  fillColor: 0xff3020,      // 圈住区域填充色
+  fillAlpha: 0.35,
+  fillFade: 1400,           // 红色区域淡出时长(ms)
+  burnDamage: 600,          // 圈内造成的伤害(秒杀普通怪,对 Boss 是大额伤害)
+  minLoopArea: 1600,        // 小于该面积的环忽略(避免误触发)
+  maxTrailPoints: 600       // 轨迹点上限(性能保护)
+};
+
+/**
+ * 掉落与道具系统:击败敌人有几率掉落碎片(火焰/金币堆/各种增益)。
+ * 火焰碎片每 5 关最多 3 个。金币击杀自动获得,金币堆需移动拾取。
+ */
+export const PICKUPS = {
+  coinPerKill: 2,          // 每击杀自动获得金币
+  itemDropChance: 0.12,    // 击杀掉落"增益/金币堆"碎片的概率
+  fireDropChance: 0.07,    // 击杀掉落"火焰碎片"的概率
+  fireMaxPer5Waves: 3,     // 火焰碎片每 5 关上限
+  lifespan: 13000,         // 碎片在地图上的存活时间(ms),超时消失
+  pickupRadius: 16,
+  // 金币堆:吃到金币堆碎片后,附近生成整齐排列的金币区域
+  coinGrid: { cols: 4, rows: 3, spacing: 48, value: 5, radius: 11 },
+  // 各增益碎片掉落权重(火焰单独计算,不在此表)
+  weights: {
+    coin: 1.3, slowAll: 1.0, defDown: 1.0, atkDown: 1.0,
+    kill10: 0.7, atkUp: 1.0, invincible: 0.8, heal30: 1.0, timeStop: 0.6
+  },
+  // 各增益参数
+  effects: {
+    slowAll:    { duration: 6000, factor: 0.5 },   // 群体减速 50% 6s
+    defDown:    { duration: 8000, factor: 0.4 },   // 敌人防御 ×0.4 8s
+    atkDown:    { duration: 8000, factor: 0.5 },   // 敌人攻击 ×0.5 8s
+    kill10:     { count: 10 },                     // 随机消灭 10 个敌人
+    atkUp:      { duration: 10000, mul: 1.8 },     // 我方输出 ×1.8 10s
+    invincible: { duration: 2000 },                // 无敌 2s
+    heal30:     { percent: 0.3 },                  // 恢复 30% 生命
+    timeStop:   { duration: 5000 }                 // 时间停止 5s(敌人静止,角色可动可攻击)
+  },
+  // 外观颜色与名称
+  meta: {
+    fire:       { color: 0xff7a18, name: '火焰' },
+    coin:       { color: 0xffd24a, name: '金币堆' },
+    slowAll:    { color: 0x7fa8ff, name: '群体减速' },
+    defDown:    { color: 0x9b8cff, name: '减防御' },
+    atkDown:    { color: 0x6bd3ff, name: '降攻击' },
+    kill10:     { color: 0xff4d4d, name: '秒杀10' },
+    atkUp:      { color: 0xff9f43, name: '攻击提升' },
+    invincible: { color: 0xfff27a, name: '无敌2秒' },
+    heal30:     { color: 0x49e07a, name: '回血30%' },
+    timeStop:   { color: 0x9be7ff, name: '时间停止' }
   }
 };
 

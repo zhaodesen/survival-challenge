@@ -48,6 +48,7 @@ export default class Device extends Phaser.GameObjects.Container {
   }
 
   setActivated(on, time) {
+    if (!this.scene) return;
     if (on === this.activated) return;
     this.activated = on;
     if (on) {

@@ -12,6 +12,11 @@ export default class UIScene extends Phaser.Scene {
   create() {
     this.game_ = this.scene.get('Game');
     const W = this.scale.width;
+    const H = this.scale.height;
+
+    // 低血量血色渐晕(全屏覆盖,平时隐藏;置于 HUD 之下,世界之上)
+    this.vignette = this.add.image(W / 2, H / 2, 'vignette')
+      .setDepth(-10).setAlpha(0).setScrollFactor(0);
 
     // 左上圆形小地图
     this.createMinimap();
@@ -21,6 +26,11 @@ export default class UIScene extends Phaser.Scene {
     this.timeText = this.add.text(hx, 16, '', { fontSize: '26px', fontStyle: 'bold', color: '#ffffff' });
     this.statText = this.add.text(hx, 50, '', { fontSize: '18px', color: '#aab6c6' });
 
+    // 金币(屏幕顶部居中)
+    this.coinText = this.add.text(W / 2, 56, '', {
+      fontSize: '24px', fontStyle: 'bold', color: '#ffd24a', stroke: '#000', strokeThickness: 4
+    }).setOrigin(0.5, 0);
+
     // 玩家血条
     this.hpBarBg = this.add.rectangle(hx, 88, 260, 20, 0x000000, 0.5).setOrigin(0, 0).setStrokeStyle(2, 0x33405a);
     this.hpBar = this.add.rectangle(hx + 2, 90, 256, 16, 0x49e07a).setOrigin(0, 0);
@@ -29,8 +39,15 @@ export default class UIScene extends Phaser.Scene {
     // 当前机关提示
     this.deviceText = this.add.text(hx, 120, '', { fontSize: '18px', color: '#4fd1ff' });
 
-    // 减速状态
+    // 减速 / 火焰 / 增益状态
     this.slowText = this.add.text(hx, 148, '', { fontSize: '16px', color: '#7fa8ff' });
+    this.fireText = this.add.text(hx, 172, '', { fontSize: '16px', color: '#ff7a18' });
+    this.buffText = this.add.text(hx, 196, '', { fontSize: '15px', color: '#ffe08a' });
+
+    // 关卡横幅(屏幕中部偏上)
+    this.banner = this.add.text(W / 2, this.scale.height * 0.34, '', {
+      fontSize: '46px', fontStyle: 'bold', color: '#ffffff', align: 'center'
+    }).setOrigin(0.5).setAlpha(0);
 
     // Boss 倒计时(屏幕中上)
     this.bossWarn = this.add.text(W / 2, 90, '', {
@@ -104,9 +121,25 @@ export default class UIScene extends Phaser.Scene {
       }
     }
 
+    // 掉落道具碎片:按各自颜色;金币:金色点
+    if (g.dropSystem) {
+      g.dropSystem.items.getChildren().forEach((f) => {
+        if (!f.active) return;
+        const { mx, my } = this.worldToMini(f.x, f.y);
+        gfx.fillStyle(0xffffff, 1);
+        gfx.fillCircle(mx, my, 3);
+      });
+      gfx.fillStyle(0xffd24a, 1);
+      g.dropSystem.coins.getChildren().forEach((c) => {
+        if (!c.active) return;
+        const { mx, my } = this.worldToMini(c.x, c.y);
+        gfx.fillRect(mx - 1, my - 1, 2, 2);
+      });
+    }
+
     // Boss:粉色大点
-    if (g.bossManager && g.bossManager.hasBoss) {
-      const b = g.bossManager.boss;
+    if (g.waveManager && g.waveManager.hasBoss) {
+      const b = g.waveManager.boss;
       const { mx, my } = this.worldToMini(b.x, b.y);
       gfx.fillStyle(0xff3d7f, 1);
       gfx.fillCircle(mx, my, 4.5);
@@ -150,12 +183,51 @@ export default class UIScene extends Phaser.Scene {
     ev.on('slow-triggered', (dur) => {
       this.slowEndAt = this.time.now + dur;
     });
+
+    // 关卡事件
+    ev.on('wave-start', (wave, isBoss) => {
+      const txt = isBoss ? `第 ${wave} 关 · BOSS 关` : `第 ${wave} 关`;
+      this.showBanner(txt, isBoss ? '#ff3d7f' : '#4fd1ff');
+    });
+    ev.on('wave-clear', (wave) => {
+      this.showBanner(`第 ${wave} 关 完成!`, '#49e07a');
+    });
+
+    // 火焰事件
+    ev.on('fire-on', () => { this.fireOn = true; });
+    ev.on('fire-off', () => { this.fireOn = false; });
+    ev.on('area-captured', (n) => {
+      if (n > 0) this.showBanner(`🔥 烧死 ${n} 个!`, '#ff7a18', 800);
+    });
+
+    // 拾取道具提示
+    ev.on('pickup', (name, color) => {
+      const hex = `#${(color >>> 0).toString(16).padStart(6, '0')}`;
+      this.showBanner(`获得:${name}`, hex, 700);
+    });
+  }
+
+  showBanner(text, color, hold = 1100) {
+    this.banner.setText(text).setColor(color).setAlpha(1).setScale(1);
+    this.tweens.killTweensOf(this.banner);
+    this.tweens.add({ targets: this.banner, alpha: 0, scale: 1.15, delay: hold, duration: 500 });
   }
 
   fmtTime(sec) {
     const m = Math.floor(sec / 60);
     const s = sec % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  buildBuffText(g) {
+    const now = this.time.now;
+    const parts = [];
+    if (now < g.timeStopUntil) parts.push(`⏸ 时停 ${Math.ceil((g.timeStopUntil - now) / 1000)}s`);
+    if (now < g.invincibleUntil) parts.push(`🛡 无敌 ${Math.ceil((g.invincibleUntil - now) / 1000)}s`);
+    if (now < g.damageMulUntil) parts.push(`⚔ 攻击↑ ${Math.ceil((g.damageMulUntil - now) / 1000)}s`);
+    if (now < g.enemyDefUntil) parts.push(`🪓 敌防↓ ${Math.ceil((g.enemyDefUntil - now) / 1000)}s`);
+    if (now < g.enemyAtkUntil) parts.push(`🩹 敌攻↓ ${Math.ceil((g.enemyAtkUntil - now) / 1000)}s`);
+    return parts.join('   ');
   }
 
   update() {
@@ -165,8 +237,11 @@ export default class UIScene extends Phaser.Scene {
     this.updateMinimap();
 
     const sec = Math.floor(g.difficulty ? g.difficulty.seconds : 0);
-    this.timeText.setText(`⏱ ${this.fmtTime(sec)}`);
-    this.statText.setText(`击杀 ${g.kills}   Boss ${g.bossKills}   分数 ${g.score}   难度档 ${g.difficulty.tier}`);
+    const wave = g.waveManager ? g.waveManager.wave : 0;
+    const remainEnemies = g.waveManager ? g.waveManager.remaining : 0;
+    this.timeText.setText(`⏱ ${this.fmtTime(sec)}   第 ${wave} 关`);
+    this.statText.setText(`本关剩余 ${remainEnemies}   击杀 ${g.kills}   分数 ${g.score}`);
+    this.coinText.setText(`🪙 ${g.coins}`);
 
     // 血条
     const p = g.player;
@@ -174,6 +249,15 @@ export default class UIScene extends Phaser.Scene {
     this.hpBar.width = 256 * ratio;
     this.hpBar.fillColor = ratio > 0.5 ? 0x49e07a : ratio > 0.25 ? 0xffd166 : 0xff5555;
     this.hpText.setText(`${Math.ceil(p.hp)} / ${p.maxHp}`);
+
+    // 低血量(<20%)血色翻红,越低越深 + 轻微脉动
+    if (p.alive && ratio < 0.2) {
+      const t = 1 - ratio / 0.2;                       // 0→1 随血量降低
+      const pulse = 0.88 + 0.12 * Math.sin(this.time.now / 180);
+      this.vignette.setAlpha(Phaser.Math.Clamp(0.25 + t * 0.75, 0, 1) * pulse);
+    } else {
+      this.vignette.setAlpha(0);
+    }
 
     // 当前机关
     if (g.activeDevice) {
@@ -190,8 +274,18 @@ export default class UIScene extends Phaser.Scene {
       this.slowText.setText('');
     }
 
+    // 火焰状态(一次性:移动圈地,闭合即烧一次)
+    if (g.fireSystem && g.fireSystem.active) {
+      this.fireText.setText('🔥 火焰待发 · 移动圈一圈烧敌');
+    } else {
+      this.fireText.setText('');
+    }
+
+    // 增益状态汇总
+    this.buffText.setText(this.buildBuffText(g));
+
     // Boss 倒计时
-    const remain = g.bossManager ? g.bossManager.warnRemain : null;
+    const remain = g.waveManager ? g.waveManager.warnRemain : null;
     if (remain !== null) {
       this.bossWarn.setText(`⚠ BOSS 来袭  ${remain}`).setAlpha(1);
     } else if (!this.currentBoss) {

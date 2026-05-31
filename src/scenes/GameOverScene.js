@@ -22,8 +22,10 @@ export default class GameOverScene extends Phaser.Scene {
 
     const lines = [
       `存活时间    ${timeStr}`,
+      `到达关数    第 ${stats.wave} 关`,
       `击杀数      ${stats.kills}`,
       `击败 Boss   ${stats.bossKills}`,
+      `金币        ${stats.coins}`,
       `最终得分    ${stats.score}`
     ];
     this.add.text(cx, height * 0.46, lines.join('\n'), {

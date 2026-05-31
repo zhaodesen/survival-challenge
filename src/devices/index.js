@@ -1,25 +1,6 @@
 import Phaser from 'phaser';
 import Device from './Device.js';
 
-/** 🟢 生命恢复站:站立时持续回血 */
-export class HealStation extends Device {
-  constructor(scene, x, y) { super(scene, x, y, 'heal'); }
-
-  onActivate() {
-    this.aura = this.scene.add.image(0, 0, 'ring').setTint(this.cfg.color)
-      .setAlpha(0.5).setScale(0.6);
-    this.scene.player.healAuraOn = true;
-  }
-  onDeactivate() {
-    if (this.aura) { this.aura.destroy(); this.aura = null; }
-    this.scene.player.healAuraOn = false;
-  }
-  onTick(time, delta) {
-    this.scene.player.heal(this.cfg.hpPerSec * delta / 1000);
-    if (this.aura) this.aura.setPosition(this.scene.player.x, this.scene.player.y);
-  }
-}
-
 /** 💥 火炮台:周期性对一片区域造成范围伤害 */
 export class Cannon extends Device {
   constructor(scene, x, y) { super(scene, x, y, 'cannon'); }
@@ -153,7 +134,6 @@ export class SlowStation extends Device {
 }
 
 export const DEVICE_CLASSES = {
-  heal: HealStation,
   cannon: Cannon,
   laser: Laser,
   bow: Bow,

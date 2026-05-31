@@ -1,47 +1,31 @@
 import { DIFFICULTY, ENEMY } from '../config/balance.js';
 
 /**
- * DifficultyManager —— 按存活时间计算难度系数。
- * 每 30 秒一档,敌人血/攻/防与刷新数量平滑递增。
+ * DifficultyManager —— 以"关数"为单位缩放敌人属性。
+ * elapsedMs 仅用于 HUD 上的存活计时显示。
  */
 export default class DifficultyManager {
   constructor() {
     this.elapsedMs = 0;
+    this.wave = 1;
   }
 
   update(delta) {
     this.elapsedMs += delta;
   }
 
+  setWave(wave) {
+    this.wave = wave;
+  }
+
   get seconds() {
     return this.elapsedMs / 1000;
   }
 
-  get tier() {
-    return Math.floor(this.seconds / DIFFICULTY.stepSeconds);
-  }
-
-  /** 当前场上敌人数量上限 */
-  get maxAlive() {
-    const v = DIFFICULTY.maxAliveBase + this.tier * DIFFICULTY.maxAliveAddPerTier;
-    return Math.min(v, DIFFICULTY.maxAliveCap);
-  }
-
-  /** 当前刷新间隔(毫秒) */
-  get spawnInterval() {
-    const v = ENEMY.spawnIntervalBase / Math.pow(DIFFICULTY.spawnRateMul, this.tier);
-    return Math.max(ENEMY.spawnIntervalMin, v);
-  }
-
-  /** 当前每批刷新数量 */
-  get spawnBatch() {
-    return ENEMY.spawnBatchBase + Math.floor(this.tier / 2);
-  }
-
-  /** 根据难度返回某类型敌人的实际属性 */
+  /** 根据当前关数返回某类型敌人的实际属性 */
   getEnemyStats(typeKey) {
     const base = ENEMY.types[typeKey];
-    const t = this.tier;
+    const t = this.wave - 1;
     return {
       hp: Math.round(base.hp * Math.pow(DIFFICULTY.enemyHpMul, t)),
       speed: base.speed,
@@ -53,12 +37,11 @@ export default class DifficultyManager {
     };
   }
 
-  /** 根据当前时间选择敌人类型(加权随机) */
+  /** 根据当前关数选择敌人类型(加权随机) */
   pickEnemyType() {
-    const sec = this.seconds;
-    let weights = ENEMY.unlock[0].weights;
-    for (const u of ENEMY.unlock) {
-      if (sec >= u.time) weights = u.weights;
+    let weights = ENEMY.unlockByWave[0].weights;
+    for (const u of ENEMY.unlockByWave) {
+      if (this.wave >= u.wave) weights = u.weights;
     }
     const entries = Object.entries(weights).filter(([, w]) => w > 0);
     const total = entries.reduce((s, [, w]) => s + w, 0);

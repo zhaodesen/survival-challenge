@@ -59,7 +59,8 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   /** 返回 true 表示死亡 */
   takeDamage(amount) {
-    const real = Math.max(1, amount - this.def);
+    const def = this.def * (this.scene.enemyDefMul || 1);
+    const real = Math.max(1, amount - def);
     this.hp -= real;
     // 命中反馈
     this.setTintFill(0xffffff);
@@ -79,6 +80,9 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
   preUpdate(time, delta) {
     super.preUpdate(time, delta);
     if (!this.active) return;
+
+    // 时间停止:敌人静止
+    if (time < this.scene.timeStopUntil) { this.setVelocity(0, 0); return; }
 
     const target = this.scene.player;
     if (!target || !target.alive) {
