@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import audio from '../systems/AudioManager.js';
 import { WORLD } from '../config/balance.js';
+import { COLORS, FONTS } from '../config/theme.js';
 
 /**
  * UIScene —— HUD 叠加层(不随镜头移动)。读取 GameScene 状态绘制。
@@ -24,62 +25,62 @@ export default class UIScene extends Phaser.Scene {
 
     // 信息区(右移到小地图右侧)
     const hx = 196;
-    this.timeText = this.add.text(hx, 16, '', { fontSize: '26px', fontStyle: 'bold', color: '#ffffff' });
-    this.statText = this.add.text(hx, 50, '', { fontSize: '18px', color: '#aab6c6' });
+    this.timeText = this.add.text(hx, 14, '', { fontFamily: FONTS.mono, fontSize: '28px', color: COLORS.textCss });
+    this.statText = this.add.text(hx, 50, '', { fontFamily: FONTS.display, fontSize: '17px', color: '#9fb6cc' });
 
     // 金币(屏幕顶部居中)
-    this.coinText = this.add.text(W / 2, 56, '', {
-      fontSize: '24px', fontStyle: 'bold', color: '#ffd24a', stroke: '#000', strokeThickness: 4
+    this.coinText = this.add.text(W / 2, 54, '', {
+      fontFamily: FONTS.mono, fontSize: '26px', color: COLORS.goldCss, stroke: '#000', strokeThickness: 4
     }).setOrigin(0.5, 0);
 
     // 连杀显示(金币下方)
     this.comboText = this.add.text(W / 2, 92, '', {
-      fontSize: '26px', fontStyle: 'bold', color: '#ff9f43', stroke: '#000', strokeThickness: 4
+      fontFamily: FONTS.display, fontSize: '26px', fontStyle: '700', color: COLORS.amberCss, stroke: '#000', strokeThickness: 4
     }).setOrigin(0.5, 0).setAlpha(0);
 
     // 玩家血条
-    this.hpBarBg = this.add.rectangle(hx, 88, 260, 20, 0x000000, 0.5).setOrigin(0, 0).setStrokeStyle(2, 0x33405a);
-    this.hpBar = this.add.rectangle(hx + 2, 90, 256, 16, 0x49e07a).setOrigin(0, 0);
-    this.hpText = this.add.text(hx + 130, 88, '', { fontSize: '15px', color: '#ffffff' }).setOrigin(0.5, 0);
+    this.hpBarBg = this.add.rectangle(hx, 88, 260, 18, 0x000000, 0.5).setOrigin(0, 0).setStrokeStyle(1, COLORS.frame);
+    this.hpBar = this.add.rectangle(hx + 2, 90, 256, 14, COLORS.green).setOrigin(0, 0);
+    this.hpText = this.add.text(hx + 130, 86, '', { fontFamily: FONTS.mono, fontSize: '14px', color: COLORS.textCss }).setOrigin(0.5, 0);
 
     // 当前机关提示
-    this.deviceText = this.add.text(hx, 120, '', { fontSize: '18px', color: '#4fd1ff' });
+    this.deviceText = this.add.text(hx, 116, '', { fontFamily: FONTS.display, fontSize: '17px', color: COLORS.cyanCss });
 
     // 减速 / 火焰 / 增益状态
-    this.slowText = this.add.text(hx, 148, '', { fontSize: '16px', color: '#7fa8ff' });
-    this.fireText = this.add.text(hx, 172, '', { fontSize: '16px', color: '#ff7a18' });
-    this.buffText = this.add.text(hx, 196, '', { fontSize: '15px', color: '#ffe08a' });
+    this.slowText = this.add.text(hx, 144, '', { fontFamily: FONTS.display, fontSize: '15px', color: '#7fa8ff' });
+    this.fireText = this.add.text(hx, 167, '', { fontFamily: FONTS.display, fontSize: '15px', color: COLORS.amberCss });
+    this.buffText = this.add.text(hx, 190, '', { fontFamily: FONTS.display, fontSize: '14px', color: '#ffe08a' });
 
     // 关卡横幅(屏幕中部偏上)
     this.banner = this.add.text(W / 2, this.scale.height * 0.34, '', {
-      fontSize: '46px', fontStyle: 'bold', color: '#ffffff', align: 'center'
+      fontFamily: FONTS.title, fontSize: '52px', color: COLORS.textCss, align: 'center'
     }).setOrigin(0.5).setAlpha(0);
 
     // 右侧技能图标(技能阶段才显示,点击打开技能升级)
     this.skillIcon = this.add.container(W - 56, this.scale.height / 2).setDepth(50).setVisible(false);
-    const iconBg = this.add.circle(0, 0, 38, 0x141a26, 0.95).setStrokeStyle(3, 0xffd24a).setInteractive({ useHandCursor: true });
+    const iconBg = this.add.circle(0, 0, 38, COLORS.panel, 0.95).setStrokeStyle(3, COLORS.gold).setInteractive({ useHandCursor: true });
     const iconStar = this.add.image(0, -4, 'pk_atkUp').setScale(1.1);
-    const iconTxt = this.add.text(0, 22, '技能', { fontSize: '13px', color: '#ffd24a' }).setOrigin(0.5);
+    const iconTxt = this.add.text(0, 22, '技能', { fontFamily: FONTS.display, fontSize: '13px', color: COLORS.goldCss }).setOrigin(0.5);
     this.skillIcon.add([iconBg, iconStar, iconTxt]);
     iconBg.on('pointerdown', () => { if (this.game_.openSkillUpgrade) this.game_.openSkillUpgrade(); });
     this.tweens.add({ targets: this.skillIcon, scale: 1.08, duration: 700, yoyo: true, repeat: -1 });
 
     // 机关教学提示面板(底部居中,数秒后淡出)
     this.tutorialBox = this.add.container(W / 2, this.scale.height - 70).setAlpha(0);
-    this.tutorialBg = this.add.rectangle(0, 0, 760, 78, 0x141a26, 0.95).setStrokeStyle(2, 0x4fd1ff);
-    this.tutorialTitle = this.add.text(0, -20, '', { fontSize: '20px', fontStyle: 'bold', color: '#4fd1ff' }).setOrigin(0.5);
-    this.tutorialDesc = this.add.text(0, 8, '', { fontSize: '15px', color: '#cdd8e6', align: 'center', wordWrap: { width: 720 } }).setOrigin(0.5);
+    this.tutorialBg = this.add.rectangle(0, 0, 760, 78, COLORS.panel, 0.95).setStrokeStyle(1, COLORS.cyan);
+    this.tutorialTitle = this.add.text(0, -20, '', { fontFamily: FONTS.display, fontSize: '20px', fontStyle: '700', color: COLORS.cyanCss }).setOrigin(0.5);
+    this.tutorialDesc = this.add.text(0, 8, '', { fontFamily: FONTS.display, fontSize: '15px', color: '#cdd8e6', align: 'center', wordWrap: { width: 720 } }).setOrigin(0.5);
     this.tutorialBox.add([this.tutorialBg, this.tutorialTitle, this.tutorialDesc]);
 
     // Boss 倒计时(屏幕中上)
-    this.bossWarn = this.add.text(W / 2, 90, '', {
-      fontSize: '40px', fontStyle: 'bold', color: '#ff3d7f'
+    this.bossWarn = this.add.text(W / 2, 88, '', {
+      fontFamily: FONTS.display, fontSize: '40px', fontStyle: '700', color: COLORS.dangerCss
     }).setOrigin(0.5).setAlpha(0);
 
     // Boss 血条(顶部居中)
-    this.bossBarBg = this.add.rectangle(W / 2, 30, 600, 22, 0x000000, 0.55).setStrokeStyle(2, 0xff3d7f).setVisible(false);
-    this.bossBar = this.add.rectangle(W / 2 - 298, 30, 596, 16, 0xff3d7f).setOrigin(0, 0.5).setVisible(false);
-    this.bossLabel = this.add.text(W / 2, 8, '', { fontSize: '15px', color: '#ffd1e0' }).setOrigin(0.5, 0).setVisible(false);
+    this.bossBarBg = this.add.rectangle(W / 2, 30, 600, 20, 0x000000, 0.55).setStrokeStyle(1, COLORS.danger).setVisible(false);
+    this.bossBar = this.add.rectangle(W / 2 - 298, 30, 596, 14, COLORS.danger).setOrigin(0, 0.5).setVisible(false);
+    this.bossLabel = this.add.text(W / 2, 6, '', { fontFamily: FONTS.mono, fontSize: '15px', color: '#ffd1e0' }).setOrigin(0.5, 0).setVisible(false);
 
     this.bindEvents();
   }

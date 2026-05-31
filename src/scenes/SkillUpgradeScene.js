@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import audio from '../systems/AudioManager.js';
 import { SKILL, DEVICES } from '../config/balance.js';
+import { FONTS } from '../config/theme.js';
 
 /**
  * SkillUpgradeScene —— 技能升级弹框(点击右侧技能图标打开)。
@@ -25,7 +26,7 @@ export default class SkillUpgradeScene extends Phaser.Scene {
     const pw = 640; const ph = 470;
     this.add.rectangle(W / 2, H / 2, pw, ph, 0x141a26, 0.98).setStrokeStyle(3, 0xffd24a);
     const top = H / 2 - ph / 2;
-    this.add.text(W / 2, top + 26, '技能升级', { fontSize: '30px', fontStyle: 'bold', color: '#ffd24a' }).setOrigin(0.5);
+    this.add.text(W / 2, top + 26, '技能升级', { fontFamily: FONTS.title, fontSize: '34px', color: '#ffd24a' }).setOrigin(0.5);
     this.coinText = this.add.text(W / 2, top + 60, '', { fontSize: '17px', color: '#ffd24a' }).setOrigin(0.5);
 
     // 关闭

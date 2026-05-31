@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import audio from '../systems/AudioManager.js';
 import { UPGRADE, DEVICES } from '../config/balance.js';
+import { FONTS } from '../config/theme.js';
 
 /**
  * UpgradeScene —— 机关升级弹框(覆盖在 Game 之上,暂停游戏)。
@@ -35,7 +36,7 @@ export default class UpgradeScene extends Phaser.Scene {
     const top = H / 2 - ph / 2;
 
     this.titleText = this.add.text(cx, top + 26, '', {
-      fontSize: '30px', fontStyle: 'bold', color: '#ffffff'
+      fontFamily: FONTS.display, fontSize: '30px', fontStyle: '700', color: '#ffffff'
     }).setOrigin(0.5);
 
     this.descText = this.add.text(cx, top + 64, DEVICES.info[this.device.type].desc, {
@@ -51,7 +52,7 @@ export default class UpgradeScene extends Phaser.Scene {
 
     // 升级按钮
     this.btnBg = this.add.rectangle(cx, top + ph - 86, 280, 56, 0x4fd1ff).setInteractive({ useHandCursor: true });
-    this.btnText = this.add.text(cx, top + ph - 86, '', { fontSize: '24px', fontStyle: 'bold', color: '#0b0e14' }).setOrigin(0.5);
+    this.btnText = this.add.text(cx, top + ph - 86, '', { fontFamily: FONTS.display, fontSize: '24px', fontStyle: '700', color: '#0b0e14' }).setOrigin(0.5);
     this.btnBg.on('pointerdown', () => this.tryUpgrade());
 
     // 关闭按钮

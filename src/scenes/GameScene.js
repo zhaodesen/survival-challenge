@@ -9,6 +9,7 @@ import SkillSystem from '../systems/SkillSystem.js';
 import audio from '../systems/AudioManager.js';
 import { DEVICE_CLASSES } from '../devices/index.js';
 import { WORLD, DEVICES, SCORE, PICKUPS } from '../config/balance.js';
+import { COLORS } from '../config/theme.js';
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
@@ -154,19 +155,39 @@ export default class GameScene extends Phaser.Scene {
   }
 
 
-  // ---------- 背景 ----------
+  // ---------- 背景(HOLO-ARENA 战术网格) ----------
   drawBackground() {
-    this.cameras.main.setBackgroundColor(WORLD.bgColor);
+    this.cameras.main.setBackgroundColor(COLORS.bg);
     const g = this.add.graphics().setDepth(0);
-    g.fillStyle(WORLD.bgColor, 1);
+    g.fillStyle(COLORS.bg, 1);
     g.fillRect(0, 0, WORLD.width, WORLD.height);
-    g.lineStyle(1, WORLD.gridColor, 1);
-    const step = 100;
-    for (let x = 0; x <= WORLD.width; x += step) g.lineBetween(x, 0, x, WORLD.height);
-    for (let y = 0; y <= WORLD.height; y += step) g.lineBetween(0, y, WORLD.width, y);
-    // 地图边界
-    g.lineStyle(6, 0x33405a, 1);
-    g.strokeRect(0, 0, WORLD.width, WORLD.height);
+
+    // 细网格(50)
+    g.lineStyle(1, COLORS.grid, 1);
+    const fine = 50;
+    for (let x = 0; x <= WORLD.width; x += fine) g.lineBetween(x, 0, x, WORLD.height);
+    for (let y = 0; y <= WORLD.height; y += fine) g.lineBetween(0, y, WORLD.width, y);
+    // 主网格(250,更亮)
+    g.lineStyle(1.5, COLORS.gridBright, 1);
+    const major = 250;
+    for (let x = 0; x <= WORLD.width; x += major) g.lineBetween(x, 0, x, WORLD.height);
+    for (let y = 0; y <= WORLD.height; y += major) g.lineBetween(0, y, WORLD.width, y);
+
+    // 中心径向辉光(场地"扫描"中心感)
+    const glow = this.add.image(WORLD.width / 2, WORLD.height / 2, 'arena_glow')
+      .setDepth(0).setAlpha(0.5).setBlendMode(Phaser.BlendModes.ADD);
+    glow.setScale(WORLD.width / glow.width * 1.1);
+
+    // 战术边框:双线 + 四角标记
+    g.lineStyle(2, COLORS.frame, 1);
+    g.strokeRect(6, 6, WORLD.width - 12, WORLD.height - 12);
+    g.lineStyle(4, COLORS.cyan, 0.5);
+    const c = 60;
+    [[0, 0, 1, 1], [WORLD.width, 0, -1, 1], [0, WORLD.height, 1, -1], [WORLD.width, WORLD.height, -1, -1]]
+      .forEach(([cx, cy, sx, sy]) => {
+        g.lineBetween(cx + sx * 6, cy + sy * 6, cx + sx * (6 + c), cy + sy * 6);
+        g.lineBetween(cx + sx * 6, cy + sy * 6, cx + sx * 6, cy + sy * (6 + c));
+      });
   }
 
   // ---------- 输入(移动端虚拟摇杆,全屏任意位置按下即出现) ----------

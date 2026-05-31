@@ -10,7 +10,7 @@ import SkillUpgradeScene from './scenes/SkillUpgradeScene.js';
 
 const config = {
   type: Phaser.AUTO,
-  backgroundColor: '#0b0e14',
+  backgroundColor: '#070b12',
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
@@ -39,5 +39,21 @@ const config = {
   scene: [BootScene, StartScene, GameScene, UIScene, GameOverScene, UpgradeScene, SkillSelectScene, SkillUpgradeScene]
 };
 
-// eslint-disable-next-line no-new
-new Phaser.Game(config);
+function launch() {
+  if (window.__GAME_BOOTED__) return;
+  window.__GAME_BOOTED__ = true;
+  // eslint-disable-next-line no-new
+  new Phaser.Game(config);
+}
+
+// 等待主题字体就绪再启动,避免首帧用回退字体
+if (document.fonts && document.fonts.load) {
+  Promise.all([
+    document.fonts.load('700 24px "Chakra Petch"'),
+    document.fonts.load('400 24px "Share Tech Mono"'),
+    document.fonts.load('400 32px "ZCOOL QingKe HuangYou"')
+  ]).then(launch).catch(launch);
+  setTimeout(launch, 1200); // 兜底
+} else {
+  launch();
+}

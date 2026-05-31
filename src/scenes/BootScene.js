@@ -45,6 +45,9 @@ export default class BootScene extends Phaser.Scene {
     // 低血量血色渐晕(中心透明、边缘最深)
     this.makeVignette('vignette');
 
+    // 竞技场中心辉光(径向青色,ADD 混合)
+    this.makeRadialGlow('arena_glow', 512, '70,230,255');
+
     this.scene.start('Start');
   }
 
@@ -106,6 +109,19 @@ export default class BootScene extends Phaser.Scene {
     g.fillCircle(c, c, radius * 0.32);
     g.generateTexture(key, c * 2, c * 2);
     g.destroy();
+  }
+
+  makeRadialGlow(key, size, rgb) {
+    const tex = this.textures.createCanvas(key, size, size);
+    const ctx = tex.getContext();
+    const c = size / 2;
+    const grad = ctx.createRadialGradient(c, c, 0, c, c, c);
+    grad.addColorStop(0, `rgba(${rgb},0.5)`);
+    grad.addColorStop(0.4, `rgba(${rgb},0.16)`);
+    grad.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    tex.refresh();
   }
 
   makeVignette(key) {
