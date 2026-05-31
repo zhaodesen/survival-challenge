@@ -29,6 +29,7 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
   spawn(x, y, typeKey, stats) {
     this.typeKey = typeKey;
     this.setTexture(`enemy_${typeKey}`);
+    this.play(`enemy_${typeKey}_walk`, true);
     this.setPosition(x, y);
     this.maxHp = stats.hp;
     this.hp = stats.hp;
@@ -44,11 +45,12 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     this.setActive(true).setVisible(true);
     this.clearTint();
-    this.setScale(1);
+    this.setScale((stats.radius * 5.6) / this.width);
     const body = this.body;
     body.enable = true;
     body.reset(x, y);
-    this.setCircle(stats.radius, this.width / 2 - stats.radius, this.height / 2 - stats.radius);
+    const bodyRadius = stats.radius / this.scaleX;
+    this.setCircle(bodyRadius, this.width / 2 - bodyRadius, this.height / 2 - bodyRadius);
     return this;
   }
 

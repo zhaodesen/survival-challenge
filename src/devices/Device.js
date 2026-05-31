@@ -43,7 +43,7 @@ export default class Device extends Phaser.GameObjects.Container {
     this.add(this.base);
 
     // 名称标签
-    this.label = scene.add.text(0, DEVICES.baseRadius + 6, this.displayName(), {
+    this.label = scene.add.text(0, DEVICES.baseRadius + 18, this.displayName(), {
       fontSize: '14px', color: '#8aa0bb'
     }).setOrigin(0.5, 0);
     this.add(this.label);

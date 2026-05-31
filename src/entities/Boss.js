@@ -10,6 +10,8 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(15);
+    this.setScale((BOSS.base.radius * 4.8) / this.width);
+    this.play('boss_walk');
 
     this.isBoss = true;
     this.spawnIndex = spawnIndex;
@@ -26,7 +28,8 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
     this.slowUntil = 0;
     this.slowFactor = 1;
 
-    this.setCircle(BOSS.base.radius, 0, 0);
+    const bodyRadius = BOSS.base.radius / this.scaleX;
+    this.setCircle(bodyRadius, this.width / 2 - bodyRadius, this.height / 2 - bodyRadius);
 
     // 技能计时
     this.nextCharge = scene.time.now + BOSS.chargeCd;

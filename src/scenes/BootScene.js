@@ -10,23 +10,33 @@ export default class BootScene extends Phaser.Scene {
     super('Boot');
   }
 
-  create() {
-    // 生成各类纹理
-    this.makeCircle('player', PLAYER.radius, PLAYER.color, 0xffffff, 3);
-
-    Object.entries(ENEMY.types).forEach(([key, t]) => {
-      this.makeCircle(`enemy_${key}`, t.radius, t.color, 0x000000, 2);
+  preload() {
+    const spriteCfg = { frameWidth: 256, frameHeight: 256 };
+    this.load.spritesheet('player', 'assets/spritesheets/player.png', spriteCfg);
+    Object.keys(ENEMY.types).forEach((key) => {
+      this.load.spritesheet(`enemy_${key}`, `assets/spritesheets/enemy_${key}.png`, spriteCfg);
     });
+    this.load.spritesheet('boss', 'assets/spritesheets/boss.png', spriteCfg);
 
-    this.makeCircle('boss', BOSS.base.radius, BOSS.base.color, 0xffffff, 4);
-
-    // 机关:外圈环 + 内填充
     Object.keys(DEVICES).forEach((key) => {
       const cfg = DEVICES[key];
       if (cfg && typeof cfg === 'object' && cfg.color !== undefined) {
-        this.makeDevice(`device_${key}`, DEVICES.baseRadius, cfg.color);
+        this.load.image(`device_${key}`, `assets/devices/device_${key}.png`);
       }
     });
+
+    Object.keys(PICKUPS.meta).forEach((kind) => {
+      this.load.image(`pk_${kind}`, `assets/pickups/pk_${kind}.png`);
+    });
+    this.load.image('coin', 'assets/pickups/coin.png');
+
+    this.load.image('arena_floor', 'assets/backgrounds/arena_floor.jpg');
+    this.load.image('start_bg', 'assets/backgrounds/start_bg.jpg');
+    this.load.image('gameover_bg', 'assets/backgrounds/gameover_bg.jpg');
+  }
+
+  create() {
+    this.createSpriteAnimations();
 
     // 抛射物与粒子
     this.makeCircle('proj_arrow', 5, 0xeaffa0, 0x000000, 1);
@@ -35,13 +45,6 @@ export default class BootScene extends Phaser.Scene {
     this.makeRing('ring', 60);
     this.makeFragment('fragment', FIRE.fragmentRadius, FIRE.fragmentColor);
 
-    // 各类碎片(火焰/金币堆/增益)
-    Object.entries(PICKUPS.meta).forEach(([kind, m]) => {
-      this.makeFragment(`pk_${kind}`, PICKUPS.pickupRadius, m.color);
-    });
-    // 可拾取金币
-    this.makeCoin('coin', PICKUPS.coinGrid.radius);
-
     // 低血量血色渐晕(中心透明、边缘最深)
     this.makeVignette('vignette');
 
@@ -49,6 +52,21 @@ export default class BootScene extends Phaser.Scene {
     this.makeRadialGlow('arena_glow', 512, '70,230,255');
 
     this.scene.start('Start');
+  }
+
+  createSpriteAnimations() {
+    const mk = (key, frameRate = 8) => {
+      if (this.anims.exists(`${key}_walk`)) return;
+      this.anims.create({
+        key: `${key}_walk`,
+        frames: this.anims.generateFrameNumbers(key, { start: 0, end: 3 }),
+        frameRate,
+        repeat: -1
+      });
+    };
+    mk('player', 8);
+    Object.keys(ENEMY.types).forEach((key) => mk(`enemy_${key}`, key === 'runner' ? 10 : 7));
+    mk('boss', 6);
   }
 
   makeCircle(key, radius, fill, line, lineWidth) {

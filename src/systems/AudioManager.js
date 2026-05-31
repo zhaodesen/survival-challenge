@@ -6,8 +6,11 @@ class AudioManager {
   constructor() {
     this.ctx = null;
     this.master = null;
+    this.musicGain = null;
     this.last = {};
     this.muted = false;
+    this.musicTimer = null;
+    this.musicBar = 0;
   }
 
   ensure() {
@@ -18,6 +21,9 @@ class AudioManager {
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.30;
     this.master.connect(this.ctx.destination);
+    this.musicGain = this.ctx.createGain();
+    this.musicGain.gain.value = 0.18;
+    this.musicGain.connect(this.master);
   }
 
   resume() {
@@ -79,6 +85,60 @@ class AudioManager {
 
   arp(freqs, step, dur, type, vol = 0.16) {
     freqs.forEach((f, i) => this.tone({ type, f0: f, dur, vol, delay: i * step }));
+  }
+
+  musicTone({ type = 'sine', f0 = 440, f1 = null, dur = 0.1, vol = 0.12, delay = 0, attack = 0.02 }) {
+    this.ensure();
+    if (!this.ctx || this.muted || !this.musicGain) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime + delay;
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(f0, t0);
+    if (f1 != null) osc.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t0 + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(vol, t0 + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g).connect(this.musicGain);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.05);
+  }
+
+  startMusic() {
+    this.ensure();
+    if (!this.ctx || this.muted) return;
+    this.resume();
+    if (this.musicTimer) return;
+    this.musicBar = 0;
+    this.scheduleMusicBar();
+    this.musicTimer = window.setInterval(() => this.scheduleMusicBar(), 3800);
+  }
+
+  stopMusic() {
+    if (!this.musicTimer) return;
+    window.clearInterval(this.musicTimer);
+    this.musicTimer = null;
+  }
+
+  scheduleMusicBar() {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const roots = [110, 130.81, 98, 146.83];
+    const root = roots[this.musicBar % roots.length];
+    const fifth = root * 1.5;
+    const octave = root * 2;
+    const upper = root * 4;
+
+    this.musicTone({ type: 'sine', f0: root, dur: 1.55, vol: 0.12, delay: 0, attack: 0.08 });
+    this.musicTone({ type: 'sine', f0: root * 0.5, dur: 0.5, vol: 0.16, delay: 0.02, attack: 0.02 });
+    this.musicTone({ type: 'sine', f0: fifth * 0.5, dur: 0.42, vol: 0.10, delay: 1.9, attack: 0.02 });
+    [octave, fifth, upper, fifth].forEach((f, i) => {
+      this.musicTone({ type: 'triangle', f0: f, dur: 0.28, vol: 0.055, delay: 0.45 + i * 0.42, attack: 0.01 });
+    });
+    [root * 2, fifth * 2, octave * 2].forEach((f, i) => {
+      this.musicTone({ type: 'sine', f0: f, dur: 1.4, vol: 0.025, delay: 0.2 + i * 0.04, attack: 0.2 });
+    });
+    this.musicBar += 1;
   }
 
   // ---------- 命名音效 ----------

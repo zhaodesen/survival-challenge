@@ -7,9 +7,12 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
-    this.setCircle(PLAYER.radius, 0, 0);
+    this.setScale(0.42);
+    const bodyRadius = PLAYER.radius / this.scaleX;
+    this.setCircle(bodyRadius, this.width / 2 - bodyRadius, this.height / 2 - bodyRadius);
     this.setCollideWorldBounds(true);
     this.setDepth(20);
+    this.play('player_walk');
 
     this.maxHp = PLAYER.maxHp;
     this.hp = PLAYER.maxHp;

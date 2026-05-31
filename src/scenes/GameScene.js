@@ -155,39 +155,35 @@ export default class GameScene extends Phaser.Scene {
   }
 
 
-  // ---------- 背景(HOLO-ARENA 战术网格) ----------
+  // ---------- 背景(卡通动漫轻科幻竞技场) ----------
   drawBackground() {
-    this.cameras.main.setBackgroundColor(COLORS.bg);
+    this.cameras.main.setBackgroundColor(0x102634);
+    this.add.tileSprite(0, 0, WORLD.width, WORLD.height, 'arena_floor')
+      .setOrigin(0)
+      .setDepth(0);
+
     const g = this.add.graphics().setDepth(0);
-    g.fillStyle(COLORS.bg, 1);
+
+    // 场地边缘:轻科幻竞技场围栏,保留清晰边界但不再使用全息网格。
+    const m = 24;
+    g.lineStyle(18, 0xd7c7a5, 0.95);
+    g.strokeRect(m, m, WORLD.width - m * 2, WORLD.height - m * 2);
+    g.lineStyle(5, 0x43dff5, 0.72);
+    g.strokeRect(m + 18, m + 18, WORLD.width - (m + 18) * 2, WORLD.height - (m + 18) * 2);
+    g.lineStyle(4, 0xffa83d, 0.85);
+    const mark = 150;
+    [
+      [m + 70, m + 70, 1, 1],
+      [WORLD.width - m - 70, m + 70, -1, 1],
+      [m + 70, WORLD.height - m - 70, 1, -1],
+      [WORLD.width - m - 70, WORLD.height - m - 70, -1, -1]
+    ].forEach(([x, y, sx, sy]) => {
+      g.lineBetween(x, y, x + sx * mark, y);
+      g.lineBetween(x, y, x, y + sy * mark);
+    });
+
+    g.fillStyle(0x061018, 0.16);
     g.fillRect(0, 0, WORLD.width, WORLD.height);
-
-    // 细网格(50)
-    g.lineStyle(1, COLORS.grid, 1);
-    const fine = 50;
-    for (let x = 0; x <= WORLD.width; x += fine) g.lineBetween(x, 0, x, WORLD.height);
-    for (let y = 0; y <= WORLD.height; y += fine) g.lineBetween(0, y, WORLD.width, y);
-    // 主网格(250,更亮)
-    g.lineStyle(1.5, COLORS.gridBright, 1);
-    const major = 250;
-    for (let x = 0; x <= WORLD.width; x += major) g.lineBetween(x, 0, x, WORLD.height);
-    for (let y = 0; y <= WORLD.height; y += major) g.lineBetween(0, y, WORLD.width, y);
-
-    // 中心径向辉光(场地"扫描"中心感)
-    const glow = this.add.image(WORLD.width / 2, WORLD.height / 2, 'arena_glow')
-      .setDepth(0).setAlpha(0.5).setBlendMode(Phaser.BlendModes.ADD);
-    glow.setScale(WORLD.width / glow.width * 1.1);
-
-    // 战术边框:双线 + 四角标记
-    g.lineStyle(2, COLORS.frame, 1);
-    g.strokeRect(6, 6, WORLD.width - 12, WORLD.height - 12);
-    g.lineStyle(4, COLORS.cyan, 0.5);
-    const c = 60;
-    [[0, 0, 1, 1], [WORLD.width, 0, -1, 1], [0, WORLD.height, 1, -1], [WORLD.width, WORLD.height, -1, -1]]
-      .forEach(([cx, cy, sx, sy]) => {
-        g.lineBetween(cx + sx * 6, cy + sy * 6, cx + sx * (6 + c), cy + sy * 6);
-        g.lineBetween(cx + sx * 6, cy + sy * 6, cx + sx * 6, cy + sy * (6 + c));
-      });
   }
 
   // ---------- 输入(移动端虚拟摇杆,全屏任意位置按下即出现) ----------
