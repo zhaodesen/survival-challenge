@@ -15,6 +15,13 @@ const config = {
     width: 1280,
     height: 720
   },
+  // 移动端:仅触摸输入,关闭键盘,允许多点触控
+  input: {
+    keyboard: false,
+    mouse: true,
+    touch: true,
+    activePointers: 3
+  },
   physics: {
     default: 'arcade',
     arcade: {

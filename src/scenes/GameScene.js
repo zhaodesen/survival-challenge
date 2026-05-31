@@ -99,19 +99,13 @@ export default class GameScene extends Phaser.Scene {
     g.strokeRect(0, 0, WORLD.width, WORLD.height);
   }
 
-  // ---------- 输入(键盘 + 移动端摇杆) ----------
+  // ---------- 输入(移动端虚拟摇杆,全屏任意位置按下即出现) ----------
   setupInput() {
-    this.keys = this.input.keyboard.addKeys({
-      up: 'W', down: 'S', left: 'A', right: 'D',
-      upA: 'UP', downA: 'DOWN', leftA: 'LEFT', rightA: 'RIGHT'
-    });
-
     this.joy = { active: false, baseX: 0, baseY: 0, dx: 0, dy: 0, pointerId: -1 };
-    const maxR = 70;
+    const maxR = 90;
 
     this.input.on('pointerdown', (p) => {
-      // 仅在屏幕左半部分启用摇杆,避免与右侧 UI 冲突
-      if (p.x < this.scale.width / 2 && !this.joy.active) {
+      if (!this.joy.active) {
         this.joy.active = true;
         this.joy.pointerId = p.id;
         this.joy.baseX = p.x;
@@ -160,14 +154,11 @@ export default class GameScene extends Phaser.Scene {
   }
 
   readInput() {
-    let vx = 0; let vy = 0;
-    const k = this.keys;
-    if (k.left.isDown || k.leftA.isDown) vx -= 1;
-    if (k.right.isDown || k.rightA.isDown) vx += 1;
-    if (k.up.isDown || k.upA.isDown) vy -= 1;
-    if (k.down.isDown || k.downA.isDown) vy += 1;
-    if (this.joy.active) { vx += this.joy.dx; vy += this.joy.dy; }
-    this.player.setMove(vx, vy);
+    if (this.joy.active) {
+      this.player.setMove(this.joy.dx, this.joy.dy);
+    } else {
+      this.player.setMove(0, 0);
+    }
   }
 
   // ---------- 主循环 ----------

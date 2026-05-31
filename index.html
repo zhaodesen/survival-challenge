@@ -2,7 +2,11 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0b0e14" />
   <title>主角生存挑战</title>
   <style>
     html, body {
@@ -14,7 +18,11 @@
       background: #0b0e14;
       font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
       -webkit-tap-highlight-color: transparent;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
       touch-action: none;
+      overscroll-behavior: none;
     }
     #game-container {
       width: 100vw;
@@ -26,10 +34,45 @@
     canvas {
       display: block;
     }
+    /* 竖屏时提示旋转为横屏 */
+    #rotate-hint {
+      display: none;
+    }
+    @media (orientation: portrait) {
+      #rotate-hint {
+        display: flex;
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: #0b0e14;
+        color: #4fd1ff;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        gap: 18px;
+      }
+      #rotate-hint .icon {
+        font-size: 64px;
+        animation: rotateHint 1.6s ease-in-out infinite;
+      }
+      #rotate-hint .txt {
+        font-size: 22px;
+        color: #aab6c6;
+      }
+    }
+    @keyframes rotateHint {
+      0%, 40% { transform: rotate(0deg); }
+      60%, 100% { transform: rotate(-90deg); }
+    }
   </style>
 </head>
 <body>
   <div id="game-container"></div>
+  <div id="rotate-hint">
+    <div class="icon">📱</div>
+    <div class="txt">请将设备横屏游玩</div>
+  </div>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

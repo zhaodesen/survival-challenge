@@ -33,8 +33,8 @@ export default class GameOverScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     const btn = this.add.text(cx, height * 0.8, '↻  再来一局', {
-      fontSize: '32px', fontStyle: 'bold', color: '#0b0e14',
-      backgroundColor: '#4fd1ff', padding: { x: 26, y: 12 }
+      fontSize: '36px', fontStyle: 'bold', color: '#0b0e14',
+      backgroundColor: '#4fd1ff', padding: { x: 32, y: 16 }
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
     const restart = () => {
@@ -42,6 +42,5 @@ export default class GameOverScene extends Phaser.Scene {
       this.scene.launch('UI');
     };
     btn.on('pointerdown', restart);
-    this.input.keyboard.once('keydown-SPACE', restart);
   }
 }
