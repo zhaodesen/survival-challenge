@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import audio from '../systems/AudioManager.js';
 import { WORLD } from '../config/balance.js';
 
 /**
@@ -30,6 +31,11 @@ export default class UIScene extends Phaser.Scene {
     this.coinText = this.add.text(W / 2, 56, '', {
       fontSize: '24px', fontStyle: 'bold', color: '#ffd24a', stroke: '#000', strokeThickness: 4
     }).setOrigin(0.5, 0);
+
+    // 连杀显示(金币下方)
+    this.comboText = this.add.text(W / 2, 92, '', {
+      fontSize: '26px', fontStyle: 'bold', color: '#ff9f43', stroke: '#000', strokeThickness: 4
+    }).setOrigin(0.5, 0).setAlpha(0);
 
     // 玩家血条
     this.hpBarBg = this.add.rectangle(hx, 88, 260, 20, 0x000000, 0.5).setOrigin(0, 0).setStrokeStyle(2, 0x33405a);
@@ -187,6 +193,8 @@ export default class UIScene extends Phaser.Scene {
       this.bossBarBg.setVisible(true);
       this.bossBar.setVisible(true);
       this.bossLabel.setVisible(true).setText(`BOSS #${idx}`);
+      audio.boss();
+      this.cameras.main.shake(260, 0.006);
     });
     const hideBoss = () => {
       this.currentBoss = null;
@@ -207,6 +215,28 @@ export default class UIScene extends Phaser.Scene {
     });
     ev.on('wave-clear', (wave) => {
       this.showBanner(`第 ${wave} 关 完成!`, '#49e07a');
+      audio.waveclear();
+      this.cameras.main.flash(220, 60, 200, 90);
+    });
+
+    // 金币增加:计数器弹一下 + 飘 "+n"
+    ev.on('coins-gained', (n) => {
+      this.tweens.killTweensOf(this.coinText);
+      this.coinText.setScale(1).setScale(1.28);
+      this.tweens.add({ targets: this.coinText, scale: 1, duration: 200, ease: 'Back.out' });
+      const fx = this.add.text(this.coinText.x + 64, 60, `+${n}`, { fontSize: '18px', fontStyle: 'bold', color: '#ffe08a', stroke: '#000', strokeThickness: 3 }).setOrigin(0, 0);
+      this.tweens.add({ targets: fx, y: 40, alpha: 0, duration: 600, onComplete: () => fx.destroy() });
+    });
+
+    // 连杀
+    ev.on('combo', (n) => {
+      if (n >= 2) {
+        this.comboText.setText(`连杀 x${n}`).setAlpha(1).setScale(1.3);
+        this.tweens.killTweensOf(this.comboText);
+        this.tweens.add({ targets: this.comboText, scale: 1, duration: 180, ease: 'Back.out' });
+      } else {
+        this.tweens.add({ targets: this.comboText, alpha: 0, duration: 250 });
+      }
     });
 
     // 火焰事件
@@ -220,6 +250,7 @@ export default class UIScene extends Phaser.Scene {
     ev.on('pickup', (name, color) => {
       const hex = `#${(color >>> 0).toString(16).padStart(6, '0')}`;
       this.showBanner(`获得:${name}`, hex, 700);
+      audio.pickup();
     });
 
     // 新机关教学
@@ -229,6 +260,11 @@ export default class UIScene extends Phaser.Scene {
       this.tweens.killTweensOf(this.tutorialBox);
       this.tutorialBox.setAlpha(1);
       this.tweens.add({ targets: this.tutorialBox, alpha: 0, delay: 6000, duration: 800 });
+    });
+
+    // 机关满级里程碑:全屏清屏爆发
+    ev.on('milestone', (index, total) => {
+      this.showBanner(`机关满级 ${index}/${total} · 全屏爆发!`, '#ffd24a', 1000);
     });
 
     // 进入技能阶段
@@ -285,11 +321,12 @@ export default class UIScene extends Phaser.Scene {
     this.hpBar.fillColor = ratio > 0.5 ? 0x49e07a : ratio > 0.25 ? 0xffd166 : 0xff5555;
     this.hpText.setText(`${Math.ceil(p.hp)} / ${p.maxHp}`);
 
-    // 低血量(<20%)血色翻红,越低越深 + 轻微脉动
+    // 低血量(<20%)血色翻红,越低越深 + 轻微脉动 + 心跳声
     if (p.alive && ratio < 0.2) {
       const t = 1 - ratio / 0.2;                       // 0→1 随血量降低
       const pulse = 0.88 + 0.12 * Math.sin(this.time.now / 180);
       this.vignette.setAlpha(Phaser.Math.Clamp(0.25 + t * 0.75, 0, 1) * pulse);
+      audio.heartbeat();
     } else {
       this.vignette.setAlpha(0);
     }
@@ -321,12 +358,14 @@ export default class UIScene extends Phaser.Scene {
     // 增益状态汇总
     this.buffText.setText(this.buildBuffText(g));
 
-    // Boss 倒计时
+    // Boss 倒计时(每秒蜂鸣)
     const remain = g.waveManager ? g.waveManager.warnRemain : null;
     if (remain !== null) {
       this.bossWarn.setText(`⚠ BOSS 来袭  ${remain}`).setAlpha(1);
-    } else if (!this.currentBoss) {
-      this.bossWarn.setAlpha(0);
+      if (remain !== this._lastWarnSec) { this._lastWarnSec = remain; audio.warn(); }
+    } else {
+      this._lastWarnSec = null;
+      if (!this.currentBoss) this.bossWarn.setAlpha(0);
     }
 
     // Boss 血条

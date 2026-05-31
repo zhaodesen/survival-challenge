@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
+import audio from '../systems/AudioManager.js';
 
 /**
- * StartScene —— 开始界面。点击/触摸/空格开始游戏。
+ * StartScene —— 开始界面。点击/触摸开始游戏。
  */
 export default class StartScene extends Phaser.Scene {
   constructor() {
@@ -42,6 +43,8 @@ export default class StartScene extends Phaser.Scene {
     });
 
     const start = () => {
+      audio.resume();
+      audio.waveclear();
       this.scene.start('Game');
       this.scene.launch('UI');
     };

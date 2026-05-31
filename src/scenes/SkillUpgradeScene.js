@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import audio from '../systems/AudioManager.js';
 import { SKILL, DEVICES } from '../config/balance.js';
 
 /**
@@ -79,6 +80,7 @@ export default class SkillUpgradeScene extends Phaser.Scene {
     this.game_.coins -= SKILL.cost;
     this.sys_.upgrade(i);
     this.cameras.main.flash(120, 80, 200, 255);
+    audio.upgrade();
     this.render();
   }
 

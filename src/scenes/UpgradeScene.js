@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import audio from '../systems/AudioManager.js';
 import { UPGRADE, DEVICES } from '../config/balance.js';
 
 /**
@@ -117,6 +118,7 @@ export default class UpgradeScene extends Phaser.Scene {
     this.device.upgrade();
     this.coinFloat.setColor('#ffd24a');
     this.cameras.main.flash(150, 80, 200, 255);
+    if (this.device.isMaxLevel) audio.maxlevel(); else audio.upgrade();
     this.render();
   }
 

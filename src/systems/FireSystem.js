@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import audio from './AudioManager.js';
 import { FIRE } from '../config/balance.js';
 
 /**
@@ -101,7 +102,8 @@ export default class FireSystem {
         burned += 1;
       }
     }
-    if (burned > 0) this.scene.cameras.main.shake(120, 0.005);
+    if (burned > 0) { this.scene.cameras.main.shake(120, 0.005); this.scene.hitstop(70); }
+    audio.fire();
     this.scene.events.emit('area-captured', burned);
   }
 
