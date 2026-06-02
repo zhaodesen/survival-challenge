@@ -110,6 +110,7 @@ export const BOSS = {
 export const DEVICES = {
   // 共用外观
   baseRadius: 34,
+  controlRadius: 118,
   // 教学:前几关每关引入一种机关(顺序由简到繁)
   introOrder: ['bow', 'cannon', 'laser', 'thunder', 'slow'],
   // 机关位置随机生成的约束
@@ -118,7 +119,7 @@ export const DEVICES = {
   minPlayerDist: 280,     // 距玩家出生点最小距离
   // 各机关的名称与教学说明
   info: {
-    bow:     { name: '弓箭', desc: '持续锁定最近的单个敌人射箭。走到机关上踩住即可操控;点击机关可花金币升级。' },
+    bow:     { name: '弓箭', desc: '持续锁定最近的单个敌人射箭。靠近机关进入操控圈即可连接操控;点击机关可花金币升级。' },
     cannon:  { name: '火炮台', desc: '周期性向敌群轰炸一片区域,造成范围伤害。适合清理成群的敌人。' },
     laser:   { name: '激光炮', desc: '朝最近敌人方向发射穿透直线激光,持续灼烧路径上的所有敌人。' },
     thunder: { name: '雷电站', desc: '电击单体并向周围溅射,每层衰减 10%(最低 40%)。越密集越赚。' },
@@ -233,6 +234,8 @@ export const PICKUPS = {
   pickupRadius: 16,
   // 金币堆:吃到金币堆碎片后,附近生成整齐排列的金币区域
   coinGrid: { cols: 4, rows: 3, spacing: 48, value: 5, radius: 11 },
+  coinMagnetRadius: 260,
+  coinMagnetSpeed: 620,
   // 各增益碎片掉落权重(火焰单独计算,不在此表)
   weights: {
     coin: 1.3, slowAll: 1.0, defDown: 1.0, atkDown: 1.0,

@@ -108,10 +108,14 @@ export default class SkillSystem {
     const ey = p.y + Math.sin(sk.aimAngle) * st.length;
     const g = sk.beam;
     g.clear();
+    g.lineStyle(st.width * 1.8, st.color, 0.2);
+    g.lineBetween(p.x, p.y, ex, ey);
     g.lineStyle(st.width, st.color, 0.85);
     g.lineBetween(p.x, p.y, ex, ey);
     g.lineStyle(st.width * 0.4, 0xffffff, 0.9);
     g.lineBetween(p.x, p.y, ex, ey);
+    g.fillStyle(0xffffff, 0.75);
+    g.fillCircle(p.x, p.y, st.width * 0.5);
     const dmg = st.dps * delta / 1000;
     const half = st.width / 2 + 6;
     for (const h of this.scene.getHostiles()) {
@@ -157,6 +161,7 @@ export default class SkillSystem {
     this.scene.spawnManager.applySlowAll(st.slowFactor, until);
     this.scene.activeSlowUntil = until;
     if (this.scene.waveManager.hasBoss) this.scene.waveManager.boss.applySlow(st.slowFactor, until);
+    this.scene.fxSlowWave(p.x, p.y, 520, st.color);
     this.scene.cameras.main.flash(150, 120, 160, 255);
   }
 }

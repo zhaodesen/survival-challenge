@@ -23,6 +23,8 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.xp = 1;
     this.slowUntil = 0;       // 减速结束时间戳
     this.slowFactor = 1;
+    this.baseScale = 1;
+    this.nextHurtFxAt = 0;
   }
 
   /** 从池中激活并设定属性 */
@@ -45,7 +47,8 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     this.setActive(true).setVisible(true);
     this.clearTint();
-    this.setScale((stats.radius * 5.6) / this.width);
+    this.baseScale = (stats.radius * 5.6) / this.width;
+    this.setScale(this.baseScale);
     const body = this.body;
     body.enable = true;
     body.reset(x, y);
@@ -64,9 +67,22 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     const def = this.def * (this.scene.enemyDefMul || 1);
     const real = Math.max(1, amount - def);
     this.hp -= real;
-    // 命中反馈
-    this.setTintFill(0xffffff);
-    this.scene.time.delayedCall(60, () => { if (this.active) this.clearTint(); });
+    // 命中反馈。激光类持续伤害会高频触发,这里做节流。
+    const now = this.scene.time.now;
+    if (now >= this.nextHurtFxAt) {
+      this.nextHurtFxAt = now + 90;
+      this.setTintFill(0xffffff);
+      this.scene.tweens.killTweensOf(this);
+      this.setScale(this.baseScale * 1.12, this.baseScale * 0.88);
+      this.scene.tweens.add({
+        targets: this,
+        scaleX: this.baseScale,
+        scaleY: this.baseScale,
+        duration: 110,
+        ease: 'Back.out'
+      });
+      this.scene.time.delayedCall(55, () => { if (this.active) this.clearTint(); });
+    }
     if (this.hp <= 0) {
       return true;
     }

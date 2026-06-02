@@ -338,7 +338,7 @@ export default class UIScene extends Phaser.Scene {
     } else if (g.activeDevice) {
       this.deviceText.setText(`▶ 操控中:${g.activeDevice.displayName()}`);
     } else {
-      this.deviceText.setText('（站到机关上以操控;点击机关升级)');
+      this.deviceText.setText('（进入机关光圈连接操控;点击机关升级)');
     }
 
     // 减速状态

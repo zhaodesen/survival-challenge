@@ -8,7 +8,7 @@ import DropSystem from '../systems/DropSystem.js';
 import SkillSystem from '../systems/SkillSystem.js';
 import audio from '../systems/AudioManager.js';
 import { DEVICE_CLASSES } from '../devices/index.js';
-import { WORLD, DEVICES, SCORE, PICKUPS } from '../config/balance.js';
+import { WORLD, DEVICES, SCORE, PICKUPS, ENEMY, UPGRADE } from '../config/balance.js';
 import { COLORS } from '../config/theme.js';
 
 export default class GameScene extends Phaser.Scene {
@@ -79,6 +79,15 @@ export default class GameScene extends Phaser.Scene {
     this.arrows = [];
     this.fx = this.add.graphics().setDepth(9);
     this.enemyHpGfx = this.add.graphics().setDepth(11);  // 敌人血条层
+    this.bossGuideGfx = this.add.graphics().setDepth(6);
+    this.bossGuideText = this.add.text(0, 0, '', {
+      fontSize: '17px',
+      fontStyle: 'bold',
+      color: '#fff0bd',
+      stroke: '#1f1208',
+      strokeThickness: 4
+    }).setOrigin(0.5).setDepth(30).setVisible(false);
+    this.bossGuideDevice = null;
 
     // 碰撞:玩家 vs 敌人 / Boss
     this.physics.add.overlap(this.player, this.spawnManager.group, this.onPlayerHit, null, this);
@@ -144,14 +153,48 @@ export default class GameScene extends Phaser.Scene {
     return best;
   }
 
-  /** 打开机关升级弹框(暂停游戏) */
+  /** 点击机关:即时升级,不再打开暂停弹框 */
   openUpgrade(device) {
     if (this.gameOver) return;
-    if (this.scene.isActive('Upgrade')) return;
-    // 取消摇杆,避免暂停后残留
-    this.joy.active = false; this.joy.dx = 0; this.joy.dy = 0; this.joy.pointerId = -1;
-    this.hideJoystick();
-    this.scene.launch('Upgrade', { device });
+    if (!device || !device.active) return;
+    if (device.isMaxLevel) {
+      this.showDeviceToast(device, '已满级', '#ffd24a');
+      audio.maxlevel();
+      return;
+    }
+    if (this.coins < UPGRADE.cost) {
+      this.showDeviceToast(device, `金币不足 ${this.coins}/${UPGRADE.cost}`, '#ff6b6b');
+      audio.warn();
+      return;
+    }
+
+    this.coins -= UPGRADE.cost;
+    const upgraded = device.upgrade();
+    if (!upgraded) return;
+
+    this.showDeviceToast(device, `升级 Lv.${device.level}`, '#7dff9f');
+    this.fxMuzzle(device.x, device.y, device.cfg.color, 54);
+    this.events.emit('coins-spent', UPGRADE.cost);
+    if (device.isMaxLevel) audio.maxlevel(); else audio.upgrade();
+  }
+
+  showDeviceToast(device, text, color) {
+    const t = this.add.text(device.x, device.y - 86, text, {
+      fontSize: '18px',
+      fontStyle: 'bold',
+      color,
+      stroke: '#111827',
+      strokeThickness: 4
+    }).setOrigin(0.5).setDepth(40);
+    this.tweens.add({
+      targets: t,
+      y: t.y - 34,
+      alpha: 0,
+      scale: 1.12,
+      duration: 760,
+      ease: 'Quad.out',
+      onComplete: () => t.destroy()
+    });
   }
 
 
@@ -272,6 +315,8 @@ export default class GameScene extends Phaser.Scene {
     } else {
       // 机关激活判定 + 满级里程碑 + 全机关满级检测
       this.updateDeviceActivation(time);
+      this.updateDeviceUpgradeHints();
+      this.updateBossPrepGuide();
       this.devices.forEach((d) => d.update(time, delta));
       this.checkDeviceMilestones();
       this.checkAllDevicesMaxed();
@@ -325,7 +370,6 @@ export default class GameScene extends Phaser.Scene {
     if (this.skillSelectOffered) return;
     if (this.devices.length < DEVICES.introOrder.length) return;
     if (!this.devices.every((d) => d.isMaxLevel)) return;
-    if (this.scene.isActive('Upgrade')) return;   // 等升级弹框关闭后再弹
     this.skillSelectOffered = true;
     this.time.delayedCall(1200, () => { if (!this.gameOver) this.scene.launch('SkillSelect'); });
   }
@@ -334,6 +378,7 @@ export default class GameScene extends Phaser.Scene {
   enterSkillMode(types) {
     this.skillMode = true;
     types.forEach((t) => this.skills.addSkill(t));
+    this.clearBossPrepGuide();
     this.devices.forEach((d) => d.destroy());
     this.devices = [];
     this.activeDevice = null;
@@ -437,18 +482,96 @@ export default class GameScene extends Phaser.Scene {
   updateDeviceActivation(time) {
     const px = this.player.x; const py = this.player.y;
     let nearest = null; let bestD = Infinity;
-    const r = DEVICES.baseRadius + 4;
-    // 只在"非满级"机关里找玩家正在踩的那个
+    const r = DEVICES.controlRadius || (DEVICES.baseRadius + 4);
+    // 只在"非满级"机关里找玩家正在连接操控的那个
     for (const d of this.devices) {
       if (d.isMaxLevel) continue;
       const dist = Phaser.Math.Distance.Squared(px, py, d.x, d.y);
       if (dist <= r * r && dist < bestD) { bestD = dist; nearest = d; }
     }
     for (const d of this.devices) {
-      // 满级机关:自动攻击,常驻激活;其余:玩家踩中才激活
+      // 满级机关:自动攻击,常驻激活;其余:玩家进入操控圈后激活
       d.setActivated(d.isMaxLevel || d === nearest, time);
     }
     this.activeDevice = nearest;
+  }
+
+  updateDeviceUpgradeHints() {
+    const canUpgrade = this.coins >= UPGRADE.cost;
+    for (const d of this.devices) {
+      d.setUpgradeAvailable(canUpgrade && !d.isMaxLevel);
+    }
+  }
+
+  updateBossPrepGuide() {
+    const remain = this.waveManager ? this.waveManager.warnRemain : null;
+    if (remain === null || this.devices.length === 0) {
+      this.clearBossPrepGuide();
+      return;
+    }
+
+    const device = this.pickBossPrepDevice();
+    if (!device) {
+      this.clearBossPrepGuide();
+      return;
+    }
+
+    if (this.bossGuideDevice && this.bossGuideDevice !== device) {
+      this.bossGuideDevice.setBossRecommended(false);
+    }
+    this.bossGuideDevice = device;
+    device.setBossRecommended(true);
+
+    const p = this.player;
+    const ang = Math.atan2(p.y - device.y, p.x - device.x);
+    const standR = Math.min(DEVICES.controlRadius * 0.72, 84);
+    const sx = device.x + Math.cos(ang) * standR;
+    const sy = device.y + Math.sin(ang) * standR;
+
+    const g = this.bossGuideGfx;
+    g.clear();
+    const alpha = 0.55 + 0.2 * Math.sin(this.time.now / 150);
+    g.lineStyle(5, 0xffa83d, alpha * 0.45);
+    g.lineBetween(p.x, p.y, sx, sy);
+    g.lineStyle(2, 0xffffff, alpha);
+    g.lineBetween(p.x, p.y, sx, sy);
+    g.fillStyle(0xffa83d, 0.18);
+    g.fillCircle(sx, sy, 34);
+    g.lineStyle(4, 0xfff0bd, alpha);
+    g.strokeCircle(sx, sy, 34);
+    g.lineStyle(2, 0xffffff, alpha);
+    g.strokeCircle(sx, sy, 20);
+
+    this.bossGuideText
+      .setText(`推荐站位 · ${device.displayName()}`)
+      .setPosition(sx, sy - 50)
+      .setVisible(true);
+  }
+
+  pickBossPrepDevice() {
+    let best = null;
+    let bestScore = -Infinity;
+    for (const d of this.devices) {
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, d.x, d.y);
+      const damageBias = d.type === 'slow' ? 0 : 2;
+      const maxBias = d.isMaxLevel ? 4 : 0;
+      const activeBias = d === this.activeDevice ? 2 : 0;
+      const score = d.level * 3 + damageBias + maxBias + activeBias - dist / 220;
+      if (score > bestScore) {
+        bestScore = score;
+        best = d;
+      }
+    }
+    return best;
+  }
+
+  clearBossPrepGuide() {
+    if (this.bossGuideGfx) this.bossGuideGfx.clear();
+    if (this.bossGuideText) this.bossGuideText.setVisible(false);
+    if (this.bossGuideDevice) {
+      this.bossGuideDevice.setBossRecommended(false);
+      this.bossGuideDevice = null;
+    }
   }
 
   // ---------- 战斗 ----------
@@ -477,7 +600,14 @@ export default class GameScene extends Phaser.Scene {
     this.kills += 1;
     this.score += SCORE.perKill;
     this.coins += PICKUPS.coinPerKill;
-    this.fxDeath(enemy.x, enemy.y, enemy.tintTopLeft || 0xffffff);
+    this.fxDeath(
+      enemy.x,
+      enemy.y,
+      (ENEMY.types[enemy.typeKey] && ENEMY.types[enemy.typeKey].color) || 0xffffff,
+      enemy.texture.key,
+      enemy.frame.name,
+      enemy.scaleX
+    );
     audio.kill();
     this.bumpCombo();
     const x = enemy.x; const y = enemy.y;
@@ -494,6 +624,7 @@ export default class GameScene extends Phaser.Scene {
     this.hitstop(90);
     audio.boom();
     this.time.delayedCall(60, () => audio.boss());
+    this.fxDeath(boss.x, boss.y, 0xff3d7f, boss.texture.key, boss.frame.name, boss.scaleX);
     for (let i = 0; i < 3; i++) {
       this.time.delayedCall(i * 90, () => this.fxExplosion(
         boss.x + Phaser.Math.Between(-30, 30),
@@ -553,7 +684,9 @@ export default class GameScene extends Phaser.Scene {
   // ---------- 弓箭抛射物 ----------
   fireArrow(x, y, target, damage, speed) {
     const img = this.add.image(x, y, 'proj_arrow').setDepth(12);
-    this.arrows.push({ img, target, damage, speed, life: 0, lastX: target.x, lastY: target.y });
+    const trail = this.add.graphics().setDepth(11);
+    this.arrows.push({ img, trail, pts: [{ x, y }], target, damage, speed, life: 0, lastX: target.x, lastY: target.y });
+    this.fxMuzzle(x, y, 0xc6ff42, 24);
     audio.shoot();
   }
 
@@ -570,12 +703,23 @@ export default class GameScene extends Phaser.Scene {
       a.img.rotation = ang;
       a.img.x += Math.cos(ang) * a.speed * dt;
       a.img.y += Math.sin(ang) * a.speed * dt;
+      a.pts.push({ x: a.img.x, y: a.img.y });
+      if (a.pts.length > 7) a.pts.shift();
+      a.trail.clear();
+      for (let j = 1; j < a.pts.length; j++) {
+        const p0 = a.pts[j - 1];
+        const p1 = a.pts[j];
+        a.trail.lineStyle(7 - j, 0xeaff9a, j / a.pts.length * 0.5);
+        a.trail.lineBetween(p0.x, p0.y, p1.x, p1.y);
+      }
 
       const reached = Phaser.Math.Distance.Between(a.img.x, a.img.y, tx, ty) < 14;
       if (reached || a.life > 2000) {
         if (a.target && a.target.active && reached) {
+          this.fxImpact(a.img.x, a.img.y, 0xc6ff42);
           this.damageHostile(a.target, a.damage);
         }
+        a.trail.destroy();
         a.img.destroy();
         this.arrows.splice(i, 1);
       }
@@ -584,50 +728,200 @@ export default class GameScene extends Phaser.Scene {
 
   // ---------- 特效 ----------
   fxExplosion(x, y, radius, color) {
-    const c = this.add.circle(x, y, radius, color, 0.6).setDepth(11).setScale(0.2);
+    const c = this.add.circle(x, y, radius, color, 0.55).setDepth(11).setScale(0.18);
+    const core = this.add.circle(x, y, radius * 0.28, 0xffffff, 0.9).setDepth(12).setScale(0.2);
+    const ring = this.add.circle(x, y, radius * 0.35, color, 0).setStrokeStyle(5, 0xffffff, 0.9).setDepth(12);
     this.tweens.add({
       targets: c, scale: 1, alpha: 0, duration: 280, ease: 'Quad.out',
       onComplete: () => c.destroy()
     });
+    this.tweens.add({ targets: core, scale: 2.2, alpha: 0, duration: 220, ease: 'Quad.out', onComplete: () => core.destroy() });
+    this.tweens.add({
+      targets: ring,
+      radius,
+      alpha: 0,
+      duration: 360,
+      ease: 'Cubic.out',
+      onUpdate: () => ring.setStrokeStyle(5, 0xffffff, ring.alpha),
+      onComplete: () => ring.destroy()
+    });
+    for (let i = 0; i < 12; i++) {
+      const a = Math.PI * 2 * i / 12 + Math.random() * 0.2;
+      const dist = radius * (0.45 + Math.random() * 0.6);
+      const spark = this.add.circle(x, y, Phaser.Math.Between(2, 4), i % 2 ? color : 0xffffff, 0.95).setDepth(12);
+      this.tweens.add({
+        targets: spark,
+        x: x + Math.cos(a) * dist,
+        y: y + Math.sin(a) * dist,
+        alpha: 0,
+        scale: 0.25,
+        duration: 240 + Math.random() * 160,
+        ease: 'Quad.out',
+        onComplete: () => spark.destroy()
+      });
+    }
     audio.boom();
   }
 
   fxTelegraph(x, y, radius, color, delay, onDone) {
     const ring = this.add.circle(x, y, radius, color, 0.12).setDepth(7)
       .setStrokeStyle(3, color, 0.7);
+    const cross = this.add.graphics().setDepth(7);
+    cross.lineStyle(2, color, 0.45);
+    cross.lineBetween(x - radius, y, x + radius, y);
+    cross.lineBetween(x, y - radius, x, y + radius);
     this.tweens.add({
-      targets: ring, alpha: 0.4, duration: delay, yoyo: false,
-      onComplete: () => { ring.destroy(); if (onDone) onDone(); }
+      targets: ring, alpha: 0.45, scale: 0.82, duration: delay, yoyo: false,
+      onComplete: () => { ring.destroy(); cross.destroy(); if (onDone) onDone(); }
     });
+    this.tweens.add({ targets: cross, alpha: 0.1, duration: delay });
   }
 
   fxLightning(x1, y1, x2, y2, color, alpha = 0.9) {
     const g = this.add.graphics().setDepth(11);
-    g.lineStyle(3, color, alpha);
-    // 折线闪电
-    const segs = 5;
-    g.beginPath();
-    g.moveTo(x1, y1);
-    for (let i = 1; i < segs; i++) {
-      const t = i / segs;
-      const mx = Phaser.Math.Linear(x1, x2, t) + Phaser.Math.Between(-10, 10);
-      const my = Phaser.Math.Linear(y1, y2, t) + Phaser.Math.Between(-10, 10);
-      g.lineTo(mx, my);
+    g.lineStyle(8, color, alpha * 0.26);
+    drawJagged(g, x1, y1, x2, y2, 18);
+    g.lineStyle(4, color, alpha);
+    drawJagged(g, x1, y1, x2, y2, 13);
+    g.lineStyle(1.5, 0xffffff, alpha);
+    drawJagged(g, x1, y1, x2, y2, 7);
+    for (let i = 0; i < 3; i++) {
+      const t = (i + 1) / 4;
+      const bx = Phaser.Math.Linear(x1, x2, t);
+      const by = Phaser.Math.Linear(y1, y2, t);
+      const ang = Math.atan2(y2 - y1, x2 - x1) + Phaser.Math.FloatBetween(-1.7, 1.7);
+      const len = Phaser.Math.Between(22, 46);
+      g.lineStyle(2, color, alpha * 0.55);
+      g.lineBetween(bx, by, bx + Math.cos(ang) * len, by + Math.sin(ang) * len);
     }
-    g.lineTo(x2, y2);
-    g.strokePath();
+    const impact = this.add.circle(x2, y2, 12, color, 0.75).setDepth(12);
+    this.tweens.add({ targets: impact, scale: 1.8, alpha: 0, duration: 180, onComplete: () => impact.destroy() });
     this.tweens.add({ targets: g, alpha: 0, duration: 180, onComplete: () => g.destroy() });
     audio.zap();
   }
 
+  fxMuzzle(x, y, color, radius = 28) {
+    const flash = this.add.circle(x, y, radius, color, 0.35).setDepth(12).setScale(0.2);
+    this.tweens.add({ targets: flash, scale: 1, alpha: 0, duration: 150, ease: 'Quad.out', onComplete: () => flash.destroy() });
+  }
+
+  fxImpact(x, y, color) {
+    const hit = this.add.circle(x, y, 14, color, 0.82).setDepth(12).setScale(0.2);
+    this.tweens.add({ targets: hit, scale: 1.25, alpha: 0, duration: 160, ease: 'Quad.out', onComplete: () => hit.destroy() });
+  }
+
+  fxTelegraphLine(x1, y1, x2, y2, color, duration) {
+    const g = this.add.graphics().setDepth(7);
+    g.lineStyle(8, color, 0.13);
+    g.lineBetween(x1, y1, x2, y2);
+    g.lineStyle(2, color, 0.72);
+    g.lineBetween(x1, y1, x2, y2);
+    this.tweens.add({ targets: g, alpha: 0, duration, ease: 'Sine.in', onComplete: () => g.destroy() });
+  }
+
+  fxSpriteAfterimage(sprite, color = 0xffffff) {
+    const img = this.add.image(sprite.x, sprite.y, sprite.texture.key, sprite.frame.name)
+      .setDepth(sprite.depth - 1)
+      .setScale(sprite.scaleX, sprite.scaleY)
+      .setRotation(sprite.rotation)
+      .setAlpha(0.34)
+      .setTint(color);
+    this.tweens.add({ targets: img, alpha: 0, scaleX: sprite.scaleX * 1.08, scaleY: sprite.scaleY * 1.08, duration: 260, onComplete: () => img.destroy() });
+  }
+
+  fxBossChargeWindup(x, y, radius, color) {
+    for (let i = 0; i < 3; i++) {
+      const ring = this.add.circle(x, y, radius * (1.2 + i * 0.55), color, 0)
+        .setStrokeStyle(4, color, 0.65 - i * 0.12)
+        .setDepth(13);
+      this.tweens.add({
+        targets: ring,
+        radius: radius * (0.35 + i * 0.2),
+        alpha: 0,
+        duration: 520 + i * 120,
+        ease: 'Sine.in',
+        onUpdate: () => ring.setStrokeStyle(4, color, ring.alpha),
+        onComplete: () => ring.destroy()
+      });
+    }
+  }
+
+  fxBossSummon(x, y, color) {
+    const group = this.add.container(x, y).setDepth(13);
+    const g = this.add.graphics();
+    const r = 96;
+    g.lineStyle(5, color, 0.82);
+    g.strokeCircle(0, 0, r);
+    g.lineStyle(2, 0xffffff, 0.85);
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI * 2 * i / 6;
+      g.lineBetween(0, 0, Math.cos(a) * r, Math.sin(a) * r);
+    }
+    group.add(g);
+    this.tweens.add({
+      targets: group,
+      rotation: Math.PI,
+      scale: 1.25,
+      alpha: 0,
+      duration: 520,
+      ease: 'Cubic.out',
+      onComplete: () => group.destroy()
+    });
+  }
+
+  fxSlam(x, y, radius, color) {
+    this.fxExplosion(x, y, radius, color);
+    const cracks = this.add.graphics().setDepth(12);
+    cracks.lineStyle(4, 0xfff0bd, 0.8);
+    for (let i = 0; i < 10; i++) {
+      const a = Math.PI * 2 * i / 10 + Math.random() * 0.25;
+      const inner = radius * 0.18;
+      const outer = radius * (0.55 + Math.random() * 0.45);
+      cracks.lineBetween(
+        x + Math.cos(a) * inner,
+        y + Math.sin(a) * inner,
+        x + Math.cos(a) * outer,
+        y + Math.sin(a) * outer
+      );
+    }
+    this.tweens.add({ targets: cracks, alpha: 0, duration: 650, ease: 'Quad.out', onComplete: () => cracks.destroy() });
+    this.cameras.main.shake(150, 0.006);
+  }
+
+  fxSlowWave(x, y, radius, color) {
+    const ring = this.add.circle(x, y, 24, color, 0.08).setStrokeStyle(6, color, 0.75).setDepth(12);
+    this.tweens.add({
+      targets: ring,
+      radius,
+      alpha: 0,
+      duration: 620,
+      ease: 'Cubic.out',
+      onUpdate: () => ring.setStrokeStyle(6, color, ring.alpha),
+      onComplete: () => ring.destroy()
+    });
+  }
+
   /** 击杀粒子迸溅(替代旧白圈),更有"脆"感 */
-  fxDeath(x, y, color) {
+  fxDeath(x, y, color, textureKey = null, frameName = null, scale = 1) {
+    if (textureKey) {
+      const ghost = this.add.image(x, y, textureKey, frameName).setDepth(11).setScale(scale).setTint(0xffffff).setAlpha(0.95);
+      this.tweens.add({
+        targets: ghost,
+        scaleX: scale * 1.35,
+        scaleY: scale * 0.45,
+        y: y - 10,
+        alpha: 0,
+        duration: 260,
+        ease: 'Quad.out',
+        onComplete: () => ghost.destroy()
+      });
+    }
     const ring = this.add.circle(x, y, 16, 0xffffff, 0.85).setDepth(11).setScale(0.3);
     this.tweens.add({ targets: ring, scale: 1.1, alpha: 0, duration: 200, onComplete: () => ring.destroy() });
-    const shards = 6;
+    const shards = 10;
     for (let i = 0; i < shards; i++) {
       const a = (Math.PI * 2 * i) / shards + Math.random() * 0.5;
-      const dist = 18 + Math.random() * 22;
+      const dist = 22 + Math.random() * 34;
       const p = this.add.circle(x, y, Phaser.Math.Between(2, 4), color, 1).setDepth(11);
       this.tweens.add({
         targets: p, x: x + Math.cos(a) * dist, y: y + Math.sin(a) * dist,
@@ -656,4 +950,18 @@ export default class GameScene extends Phaser.Scene {
       this.scene.start('GameOver', stats);
     });
   }
+}
+
+function drawJagged(g, x1, y1, x2, y2, variance) {
+  const segs = 7;
+  g.beginPath();
+  g.moveTo(x1, y1);
+  for (let i = 1; i < segs; i++) {
+    const t = i / segs;
+    const mx = Phaser.Math.Linear(x1, x2, t) + Phaser.Math.Between(-variance, variance);
+    const my = Phaser.Math.Linear(y1, y2, t) + Phaser.Math.Between(-variance, variance);
+    g.lineTo(mx, my);
+  }
+  g.lineTo(x2, y2);
+  g.strokePath();
 }

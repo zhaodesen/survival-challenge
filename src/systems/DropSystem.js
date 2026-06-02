@@ -71,6 +71,7 @@ export default class DropSystem {
         const coin = this.coins.create(x, y, 'coin');
         coin.value = PICKUPS.coinGrid.value;
         coin.setDepth(7);
+        coin.magnetized = false;
         coin.body.setCircle(radius, coin.width / 2 - radius, coin.height / 2 - radius);
         this.scene.tweens.add({ targets: coin, scale: 1.15, duration: 500, yoyo: true, repeat: -1, delay: (r + c) * 40 });
       }
@@ -115,6 +116,34 @@ export default class DropSystem {
   update(time) {
     this.items.getChildren().forEach((it) => {
       if (it.active && time > it.expireAt) this.removeItem(it);
+    });
+    this.updateCoinMagnet();
+  }
+
+  updateCoinMagnet() {
+    const p = this.scene.player;
+    if (!p || !p.alive) return;
+    const r = PICKUPS.coinMagnetRadius;
+    const r2 = r * r;
+    this.coins.getChildren().forEach((coin) => {
+      if (!coin.active || !coin.body) return;
+      const d2 = Phaser.Math.Distance.Squared(coin.x, coin.y, p.x, p.y);
+      if (d2 > r2) {
+        if (coin.magnetized) {
+          coin.magnetized = false;
+          coin.setVelocity(0, 0);
+        }
+        return;
+      }
+      if (!coin.magnetized) {
+        coin.magnetized = true;
+        this.scene.tweens.killTweensOf(coin);
+        coin.setScale(1.25);
+      }
+      const d = Math.max(1, Math.sqrt(d2));
+      const pull = Phaser.Math.Linear(PICKUPS.coinMagnetSpeed * 0.45, PICKUPS.coinMagnetSpeed, 1 - d / r);
+      coin.setVelocity((p.x - coin.x) / d * pull, (p.y - coin.y) / d * pull);
+      coin.angle += 18;
     });
   }
 }

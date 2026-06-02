@@ -10,7 +10,8 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(15);
-    this.setScale((BOSS.base.radius * 4.8) / this.width);
+    this.baseScale = (BOSS.base.radius * 4.8) / this.width;
+    this.setScale(this.baseScale);
     this.play('boss_walk');
 
     this.isBoss = true;
@@ -40,6 +41,8 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
     this.state = 'chasing'; // chasing | windup | charging
     this.chargeVec = new Phaser.Math.Vector2();
     this.chargeEnd = 0;
+    this.nextAfterimage = 0;
+    this.nextHurtFxAt = 0;
 
     // 光环标识
     this.aura = scene.add.image(x, y, 'ring').setTint(BOSS.base.color)
@@ -55,8 +58,21 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
     const def = this.def * (this.scene.enemyDefMul || 1);
     const real = Math.max(1, amount - def);
     this.hp -= real;
-    this.setTintFill(0xffffff);
-    this.scene.time.delayedCall(50, () => { if (this.active) this.clearTint(); });
+    const now = this.scene.time.now;
+    if (now >= this.nextHurtFxAt) {
+      this.nextHurtFxAt = now + 100;
+      this.setTintFill(0xffffff);
+      this.scene.tweens.killTweensOf(this);
+      this.setScale(this.baseScale * 1.08, this.baseScale * 0.92);
+      this.scene.tweens.add({
+        targets: this,
+        scaleX: this.baseScale,
+        scaleY: this.baseScale,
+        duration: 120,
+        ease: 'Back.out'
+      });
+      this.scene.time.delayedCall(55, () => { if (this.active) this.clearTint(); });
+    }
     if (this.hp <= 0) return true;
     return false;
   }
@@ -98,7 +114,12 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
       if (time >= this.chargeEnd) {
         this.state = 'chasing';
         this.clearTint();
+        this.rotation = 0;
       } else {
+        if (time >= this.nextAfterimage) {
+          this.nextAfterimage = time + 75;
+          this.scene.fxSpriteAfterimage(this, 0xff3d7f);
+        }
         this.setVelocity(this.chargeVec.x * factor, this.chargeVec.y * factor);
         return;
       }
@@ -117,10 +138,22 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
       this.setTint(0xffaa00);
       const px = player.x;
       const py = player.y;
+      const ang = Math.atan2(py - this.y, px - this.x);
+      this.rotation = ang * 0.08;
+      this.scene.fxBossChargeWindup(this.x, this.y, BOSS.base.radius, 0xffaa00);
+      this.scene.fxTelegraphLine(this.x, this.y, px, py, 0xffaa00, BOSS.chargeWindup);
+      this.scene.tweens.add({
+        targets: this,
+        scaleX: this.baseScale * 1.18,
+        scaleY: this.baseScale * 0.86,
+        duration: BOSS.chargeWindup,
+        ease: 'Sine.inOut'
+      });
       this.scene.time.delayedCall(BOSS.chargeWindup, () => {
         if (!this.active) return;
         this.state = 'charging';
         this.clearTint();
+        this.setScale(this.baseScale);
         const ang = Math.atan2(py - this.y, px - this.x);
         this.chargeVec.set(Math.cos(ang) * BOSS.chargeSpeed, Math.sin(ang) * BOSS.chargeSpeed);
         this.chargeEnd = this.scene.time.now + 650;
@@ -131,7 +164,7 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
     // 触发召唤
     if (time >= this.nextSummon) {
       this.nextSummon = time + BOSS.summonCd;
-      this.scene.spawnManager.summonAround(this.x, this.y, BOSS.summonCount);
+      this.castSummon();
     }
 
     // 触发冲击波
@@ -159,11 +192,13 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
     const R = BOSS.shockwaveRadius;
     const color = 0xff3d7f;
     const ring = sc.add.circle(bx, by, 20, color, 0).setStrokeStyle(5, color, 0.9).setDepth(7);
+    const core = sc.add.circle(bx, by, 12, 0xffffff, 0.85).setDepth(16);
     sc.tweens.add({
       targets: ring, radius: R, alpha: 0, duration: BOSS.shockwaveWindup + 250, ease: 'Quad.out',
       onUpdate: () => ring.setStrokeStyle(5, color, ring.alpha),
       onComplete: () => ring.destroy()
     });
+    sc.tweens.add({ targets: core, scale: 7, alpha: 0, duration: 420, ease: 'Quad.out', onComplete: () => core.destroy() });
     sc.time.delayedCall(BOSS.shockwaveWindup, () => {
       if (!this.active) return;
       const p = sc.player;
@@ -178,12 +213,31 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
     const sc = this.scene;
     const R = BOSS.slamRadius;
     const color = 0xffaa00;
+    sc.fxTelegraphLine(this.x, this.y, px, py, color, BOSS.slamWindup);
+    sc.tweens.add({
+      targets: this,
+      y: this.y - 20,
+      duration: BOSS.slamWindup * 0.45,
+      yoyo: true,
+      ease: 'Quad.out'
+    });
     sc.fxTelegraph(px, py, R, color, BOSS.slamWindup, () => {
-      sc.fxExplosion(px, py, R, color);
+      sc.fxSlam(px, py, R, color);
       const p = sc.player;
       if (p && p.alive && Phaser.Math.Distance.Between(px, py, p.x, p.y) <= R) {
         sc.tryDamagePlayer(BOSS.slamDamage);
       }
+    });
+  }
+
+  castSummon() {
+    const sc = this.scene;
+    const color = 0xff3d7f;
+    sc.fxBossSummon(this.x, this.y, color);
+    sc.cameras.main.shake(120, 0.003);
+    sc.time.delayedCall(360, () => {
+      if (!this.active) return;
+      sc.spawnManager.summonAround(this.x, this.y, BOSS.summonCount);
     });
   }
 }

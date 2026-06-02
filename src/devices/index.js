@@ -12,6 +12,7 @@ export class Cannon extends Device {
     this.lastTick = time;
 
     const tx = target.x; const ty = target.y;
+    this.scene.fxMuzzle(this.x, this.y, this.stats.color, 34);
     // 落点预警 + 爆炸
     this.scene.fxTelegraph(tx, ty, this.stats.radius, this.stats.color, 350, () => {
       this.scene.fxExplosion(tx, ty, this.stats.radius, this.stats.color);
@@ -49,10 +50,14 @@ export class Laser extends Device {
 
     // 绘制激光
     this.beam.clear();
+    this.beam.lineStyle(this.stats.width * 1.9, this.stats.color, 0.2);
+    this.beam.lineBetween(this.x, this.y, ex, ey);
     this.beam.lineStyle(this.stats.width, this.stats.color, 0.85);
     this.beam.lineBetween(this.x, this.y, ex, ey);
     this.beam.lineStyle(this.stats.width * 0.4, 0xffffff, 0.9);
     this.beam.lineBetween(this.x, this.y, ex, ey);
+    this.beam.fillStyle(0xffffff, 0.75);
+    this.beam.fillCircle(this.x, this.y, this.stats.width * 0.55);
 
     // 对线段范围内所有目标造成 dps
     const dmg = this.stats.dps * delta / 1000;
@@ -76,6 +81,7 @@ export class Bow extends Device {
     const target = this.nearestHostile(this.stats.range);
     if (!target) return;
     this.lastTick = time;
+    this.scene.fxMuzzle(this.x, this.y, this.stats.color, 28);
     this.scene.fireArrow(this.x, this.y, target, this.stats.damage, this.stats.projSpeed);
   }
 }
@@ -91,6 +97,7 @@ export class Thunder extends Device {
     this.lastTick = time;
 
     // 主目标
+    this.scene.fxMuzzle(this.x, this.y, this.stats.color, 34);
     this.scene.fxLightning(this.x, this.y, main.x, main.y, this.stats.color);
     // 收集溅射目标(按到主目标距离排序)
     const hostiles = this.scene.getHostiles();
@@ -128,7 +135,8 @@ export class SlowStation extends Device {
     const until = time + this.stats.duration;
     this.scene.spawnManager.applySlowAll(this.stats.slowFactor, until);
     this.scene.activeSlowUntil = until;        // 让后续生成的敌人也减速(GameScene 处理)
-    this.scene.cameras.main.flash(200, 120, 160, 255);
+    this.scene.fxSlowWave(this.x, this.y, 520, this.stats.color);
+    this.scene.cameras.main.flash(180, 120, 180, 255);
     this.scene.events.emit('slow-triggered', this.stats.duration);
   }
 }
